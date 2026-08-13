@@ -1,0 +1,34 @@
+#include "tft_driver.h"
+
+// Instantiate Adafruit ILI9341 driver using hardware SPI
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
+
+void initTFT() {
+    Serial.println("[TFT] Initializing SPI display...");
+    
+    // Explicit SPI pins configuration
+    SPI.begin(TFT_SCLK, TFT_MISO, TFT_MOSI, TFT_CS);
+    
+    tft.begin();
+    tft.setRotation(TFT_ROTATION);
+    tft.fillScreen(ILI9341_BLACK);
+
+    // Setup backlight pin
+    pinMode(TFT_BL, OUTPUT);
+    digitalWrite(TFT_BL, HIGH); // Fully turned on
+    
+    Serial.println("[TFT] Display initialized successfully.");
+}
+
+void clearDisplay() {
+    tft.fillScreen(ILI9341_BLACK);
+}
+
+void drawStatusOverlay(const char* status, uint16_t color) {
+    // Render text updates directly without full frame refreshes (partial updates)
+    tft.fillRect(0, TFT_HEIGHT - 30, TFT_WIDTH, 30, ILI9341_BLACK);
+    tft.setCursor(10, TFT_HEIGHT - 22);
+    tft.setTextColor(color);
+    tft.setTextSize(1);
+    tft.print(status);
+}

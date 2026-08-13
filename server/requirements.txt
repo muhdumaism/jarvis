@@ -1,0 +1,54 @@
+# ============================================================
+# JARVIS Server — Python Dependencies
+# ============================================================
+
+# --- Core Framework ---
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic
+pydantic-settings
+
+# --- Database ---
+sqlalchemy[asyncio]
+aiosqlite
+
+# --- Authentication ---
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+
+# --- WebSocket ---
+websockets
+
+# --- Voice / Audio ---
+faster-whisper
+numpy
+soundfile
+
+# --- TTS ---
+piper-tts
+
+# --- AI ---
+httpx
+ollama
+
+# --- Spotify ---
+spotipy
+
+# --- System Monitoring ---
+psutil
+
+# --- Utilities ---
+python-dateutil
+uuid6
+
+# --- Testing ---
+pytest
+pytest-asyncio
+
+# --- Logging ---
+structlog
+
+# --- Images ---
+Pillow

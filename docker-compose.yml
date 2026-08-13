@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: jarvis_server
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./server/nila.db:/app/nila.db
+      - ./server/models:/app/models
+      - ./server/backups:/app/backups
+      - ./firmware-build:/app/firmware-build
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: jarvis_dashboard
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    restart: unless-stopped
