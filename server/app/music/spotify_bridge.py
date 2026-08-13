@@ -24,6 +24,7 @@ class SpotifyBridge:
         self.sp: Optional[spotipy.Spotify] = None
         self._auth_manager: Optional[SpotifyOAuth] = None
         self._initialized = False
+        self.active_refresh_token: Optional[str] = None
 
     async def initialize(self, db_refresh_token: Optional[str] = None) -> None:
         """Initialize the Spotify client with refresh token credentials."""
@@ -33,6 +34,8 @@ class SpotifyBridge:
             self.sp = None
             self._initialized = False
             return
+
+        self.active_refresh_token = token_to_use
 
         try:
             # Setup OAuth manager specifically for token refreshing
@@ -109,7 +112,7 @@ class SpotifyBridge:
             # spotipy's auth manager can auto refresh if cached token exists
             cached_token = self._auth_manager.get_cached_token()
             if cached_token and self._auth_manager.is_token_expired(cached_token):
-                token_info = self._auth_manager.refresh_access_token(settings.spotify_refresh_token)
+                token_info = self._auth_manager.refresh_access_token(self.active_refresh_token or settings.spotify_refresh_token)
                 self.sp = spotipy.Spotify(auth=token_info['access_token'])
         except Exception as e:
             logger.error("spotify.token_refresh_error", error=str(e))

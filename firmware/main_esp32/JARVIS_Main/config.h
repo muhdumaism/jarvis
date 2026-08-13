@@ -13,7 +13,7 @@
 // ============================================================
 #define WIFI_SSID           "MOYIKKAL"
 #define WIFI_PASSWORD       "KAMAL4148"
-#define SERVER_HOST         "192.168.1.75" // Replace with home server LAN IP
+#define SERVER_HOST         "192.168.1.71" // Replace with home server LAN IP
 #define SERVER_PORT         8000
 #define WS_PATH             "/ws"
 #define API_KEY             "CHANGE_ME_GENERATE_A_REAL_KEY" // Match .env settings
