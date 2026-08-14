@@ -322,6 +322,8 @@ void drawEyes() {
                         strcmp(currentSystemState, "SPEAKER_DISCONNECTED") != 0);
 
     int centerX = 160;
+    int leftEyeY = isMusicMode ? 145 : 110;
+    int rightEyeY = isMusicMode ? 145 : 110;
 
     // Check state transitions
     bool stateChanged = (strcmp(currentEyeState, lastDrawnEyeState) != 0 || isMusicMode != lastDrawnEyeStateWasMusic);
