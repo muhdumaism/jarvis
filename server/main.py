@@ -91,6 +91,14 @@ async def periodic_system_status_broadcast(app: FastAPI):
 async def lifespan(app: FastAPI):
     """Application lifespan: initialize and teardown all services."""
     logger.info("jarvis.starting", version="1.0.0")
+    logger.info(
+        "settings.config_loaded",
+        stt_model=settings.stt_model,
+        tts_model=settings.piper_model_path,
+        tts_bin=settings.piper_bin_path,
+        play_tts_on_pc=settings.play_tts_on_pc,
+        speaker=settings.bluetooth_speaker_name,
+    )
 
     # 1. Event bus
     event_bus = EventBus()
