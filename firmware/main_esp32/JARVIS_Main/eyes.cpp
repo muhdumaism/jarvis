@@ -1,6 +1,7 @@
 #include "eyes.h"
 
 extern char currentSystemState[];
+extern char currentTitle[64];
 
 Eye leftEye;
 Eye rightEye;
@@ -159,8 +160,9 @@ void drawThickUpperArc(int x0, int y0, int r, int thickness, uint16_t color) {
 }
 
 void drawEyes() {
-    bool isMusicMode = (strcmp(currentSystemState, "SPOTIFY_PLAYING") == 0 || 
-                        strcmp(currentSystemState, "SPOTIFY_PAUSED") == 0);
+    bool isMusicMode = (currentTitle[0] != '\0' && 
+                        strcmp(currentSystemState, "BACKEND_DISCONNECTED") != 0 &&
+                        strcmp(currentSystemState, "SPEAKER_DISCONNECTED") != 0);
 
     // Bouncing offset for music mode
     int bobOffset = 0;
