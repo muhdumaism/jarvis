@@ -122,6 +122,7 @@ static int lastRightEyeY = -1;
 static int lastLeftPupilR = -1;
 static int lastRightPupilR = -1;
 static bool lastBlinking = false;
+static bool lastDrawnEyeStateWasMusic = false;
 static char lastDrawnEyeState[32] = "";
 
 void resetEyesDrawCache() {
@@ -132,6 +133,7 @@ void resetEyesDrawCache() {
     lastLeftPupilR = -1;
     lastRightPupilR = -1;
     lastBlinking = false;
+    lastDrawnEyeStateWasMusic = false;
     lastDrawnEyeState[0] = '\0';
 }
 
@@ -159,7 +161,7 @@ void drawThickUpperArc(int x0, int y0, int r, int thickness, uint16_t color) {
     }
 }
 
-void drawRobot(int centerX, int centerY, const char* state, bool isBlinking) {
+void drawRobotFull(int centerX, int centerY, const char* state) {
     // Colors
     uint16_t DarkBrown = 0x4901;
     uint16_t GoldMain = 0xFEC8;
@@ -167,32 +169,16 @@ void drawRobot(int centerX, int centerY, const char* state, bool isBlinking) {
     uint16_t GoldShadow = 0xE520;
     uint16_t MintGreen = 0x3F2A;
     uint16_t VisorBlack = 0x18C3;
-    uint16_t Cyan = ILI9341_CYAN;
-    uint16_t Red = ILI9341_RED;
 
-    // Bobbing animations based on state
-    int bodyBob = 0;
+    int cy = centerY;
     int earBob = 0;
     
-    if (strcmp(state, "SPEAKING") == 0) {
-        bodyBob = (int)(2.0 * sin(millis() / 150.0));
-        earBob = (int)(3.0 * sin(millis() / 150.0 + 1.0));
-    } else if (strcmp(state, "LISTENING") == 0) {
-        bodyBob = (int)(1.0 * sin(millis() / 100.0));
-        earBob = -3; // Ears perk up
-    } else if (strcmp(state, "THINKING") == 0) {
-        bodyBob = (int)(3.0 * sin(millis() / 80.0));
-        earBob = (int)(4.0 * cos(millis() / 80.0));
+    // Static perked/drooped ears on state transition
+    if (strcmp(state, "LISTENING") == 0) {
+        earBob = -3;
     } else if (strcmp(state, "ALARM_TRIGGERED") == 0) {
-        bodyBob = (int)(4.0 * sin(millis() / 50.0)); // Shaking
-        earBob = 2; // Ears droop
-    } else {
-        // Idle bobbing
-        bodyBob = (int)(1.5 * sin(millis() / 250.0));
-        earBob = (int)(1.5 * sin(millis() / 250.0));
+        earBob = 2;
     }
-
-    int cy = centerY + bodyBob;
 
     // 1. Draw Left Ear
     tft.fillTriangle(centerX - 27, cy - 35 + earBob, centerX - 37, cy - 12 + earBob, centerX - 17, cy - 10 + earBob, DarkBrown);
@@ -223,12 +209,22 @@ void drawRobot(int centerX, int centerY, const char* state, bool isBlinking) {
     tft.fillCircle(centerX + 31, cy, 5, DarkBrown);
     tft.fillCircle(centerX + 31, cy, 3, VisorBlack);
 
-    // 4. Draw Visor
-    uint16_t visorBg = (strcmp(state, "ALARM_TRIGGERED") == 0) ? tft.color565(120, 0, 0) : VisorBlack;
+    // 4. Draw Visor Bezel
     tft.fillRoundRect(centerX - 22, cy - 8, 44, 18, 5, DarkBrown);
+}
+
+void drawRobotFace(int centerX, int centerY, const char* state, bool isBlinking) {
+    uint16_t VisorBlack = 0x18C3;
+    uint16_t Cyan = ILI9341_CYAN;
+    uint16_t Red = ILI9341_RED;
+    
+    int cy = centerY;
+
+    // Clear only the internal visor screen
+    uint16_t visorBg = (strcmp(state, "ALARM_TRIGGERED") == 0) ? tft.color565(120, 0, 0) : VisorBlack;
     tft.fillRoundRect(centerX - 20, cy - 7, 40, 16, 4, visorBg);
 
-    // 5. Draw Face
+    // Draw face icons inside visor
     if (strcmp(state, "THINKING") == 0) {
         int scan = (millis() / 120) % 4;
         if (scan == 0) {
@@ -302,16 +298,18 @@ void drawEyes() {
     int leftEyeY = isMusicMode ? (145 + bobOffset) : 110;
     int rightEyeY = isMusicMode ? (145 + bobOffset) : 110;
 
-    // Force eyesMoved to be true in music mode or animated states to keep bobbing active
-    bool eyesMoved = (leftEyeY != lastLeftEyeY || rightEyeY != lastRightEyeY ||
-                      isBlinking != lastBlinking ||
-                      isMusicMode || 
-                      strcmp(currentEyeState, "IDLE") != 0 || // Always update for assistant bobbing
-                      strcmp(currentEyeState, lastDrawnEyeState) != 0);
+    // Check state and blinking transitions
+    bool stateChanged = (strcmp(currentEyeState, lastDrawnEyeState) != 0 || isMusicMode != lastDrawnEyeStateWasMusic);
+    bool blinkChanged = (isBlinking != lastBlinking);
+    
+    // Update face only if state changed, blink status changed, or active animations are running
+    bool needsFaceUpdate = (stateChanged || blinkChanged || 
+                            strcmp(currentEyeState, "THINKING") == 0 || 
+                            strcmp(currentEyeState, "SPEAKING") == 0);
 
-    if (eyesMoved) {
-        if (isMusicMode) {
-            // Clear music eyes bounding box (X: 110 to 210, Y: 120 to 165)
+    if (isMusicMode) {
+        if (stateChanged || blinkChanged || lastLeftEyeY != leftEyeY) {
+            // Clear music eyes bounding box
             tft.fillRect(110, 120, 100, 45, ILI9341_BLACK);
 
             int r = 15;
@@ -323,20 +321,25 @@ void drawEyes() {
                 drawThickUpperArc(135, leftEyeY, r, thick, ILI9341_CYAN);
                 drawThickUpperArc(185, rightEyeY, r, thick, ILI9341_CYAN);
             }
-        } else {
-            // Clear assistant robot bounding box (X: 115 to 205, Y: 60 to 158)
-            tft.fillRect(115, 60, 90, 98, ILI9341_BLACK);
-
-            // Draw full animated robot character!
-            drawRobot(160, 110, currentEyeState, isBlinking);
         }
-
-        lastLeftEyeX = leftEye.currentX; 
-        lastLeftEyeY = leftEyeY;
-        lastRightEyeX = rightEye.currentX;
-        lastRightEyeY = rightEyeY;
-        lastBlinking = isBlinking;
-        strncpy(lastDrawnEyeState, currentEyeState, sizeof(lastDrawnEyeState) - 1);
-        lastDrawnEyeState[sizeof(lastDrawnEyeState) - 1] = '\0';
+    } else {
+        // Assistant Mode
+        if (stateChanged) {
+            // Full redraw: clear the whole robot area once on transition
+            tft.fillRect(115, 60, 90, 98, ILI9341_BLACK);
+            drawRobotFull(160, 110, currentEyeState);
+        }
+        
+        if (needsFaceUpdate) {
+            // Partial redraw: clear only the visor screen and draw the eyes/mouth
+            drawRobotFace(160, 110, currentEyeState, isBlinking);
+        }
     }
+
+    lastLeftEyeY = leftEyeY;
+    lastRightEyeY = rightEyeY;
+    lastBlinking = isBlinking;
+    lastDrawnEyeStateWasMusic = isMusicMode;
+    strncpy(lastDrawnEyeState, currentEyeState, sizeof(lastDrawnEyeState) - 1);
+    lastDrawnEyeState[sizeof(lastDrawnEyeState) - 1] = '\0';
 }
