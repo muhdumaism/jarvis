@@ -6,7 +6,7 @@
 // TFT Pin Configuration
 // ============================================================
 #define TFT_CS              15  // Chip Select
-#define TFT_DC              2   // Data/Command
+#define TFT_DC              17  // Data/Command
 #define TFT_RST             4   // Reset
 #define TFT_MOSI            13  // SPI MOSI
 #define TFT_MISO            -1  // SPI MISO (Leave disconnected / unused)
