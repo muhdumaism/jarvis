@@ -41,10 +41,11 @@ class VoicePipeline:
     Flow: INMP441 → ESP32 → WebSocket → VAD → STT → Intent → Execute → TTS → ESP32 → Speaker
     """
 
-    def __init__(self, event_bus: EventBus, device_manager, music_manager=None):
+    def __init__(self, event_bus: EventBus, device_manager, music_manager=None, alarm_manager=None):
         self.event_bus = event_bus
         self.device_manager = device_manager
         self.music_manager = music_manager
+        self.alarm_manager = alarm_manager
         self.stt: Optional[STTProvider] = None
         self.intent_engine: Optional[IntentEngine] = None
         self.tts: Optional[TTSManager] = None
@@ -71,6 +72,7 @@ class VoicePipeline:
                 device_manager=self.device_manager,
                 event_bus=self.event_bus,
                 music_manager=self.music_manager,
+                alarm_manager=self.alarm_manager,
             )
             await self.intent_engine.initialize()
 

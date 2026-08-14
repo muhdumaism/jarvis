@@ -31,6 +31,7 @@ from app.automation.engine import AutomationEngine
 from app.scenes.manager import SceneManager
 from app.music.manager import MusicManager
 from app.firmware.manager import FirmwareManager
+from app.assistant.alarm import AlarmManager
 
 import structlog
 
@@ -105,6 +106,10 @@ async def lifespan(app: FastAPI):
     await event_bus.start()
     app.state.event_bus = event_bus
 
+    # 1.5. Alarm manager
+    alarm_manager = AlarmManager(event_bus)
+    app.state.alarm_manager = alarm_manager
+
     # 2. Database
     db = DatabaseManager(settings.database_url)
     await db.initialize()
@@ -134,6 +139,7 @@ async def lifespan(app: FastAPI):
         event_bus=event_bus,
         device_manager=device_manager,
         music_manager=music_manager,
+        alarm_manager=alarm_manager,
     )
     await voice_pipeline.initialize()
     app.state.voice_pipeline = voice_pipeline
