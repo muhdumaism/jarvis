@@ -206,7 +206,7 @@ void setup() {
     xTaskCreatePinnedToCore(
         UITask,
         "UI_Task",
-        8192,
+        16384, // Increased to prevent GFX/caching stack overflow
         NULL,
         2,
         &UITaskHandle,
@@ -217,7 +217,7 @@ void setup() {
     xTaskCreatePinnedToCore(
         VoiceTask,
         "Voice_Task",
-        4096,
+        12288, // Increased from 4096 to safely hold JSON and audio buffers
         NULL,
         3, // higher priority for audio capture
         &VoiceTaskHandle,
@@ -228,7 +228,7 @@ void setup() {
     xTaskCreatePinnedToCore(
         NetworkTask,
         "Network_Task",
-        8192,
+        16384, // Increased from 8192 to prevent WebSocket/JSON parser overflows
         NULL,
         2,
         &NetworkTaskHandle,
