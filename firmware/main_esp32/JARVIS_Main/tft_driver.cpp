@@ -1,13 +1,14 @@
 #include "tft_driver.h"
 
-// Instantiate Adafruit ILI9341 driver using hardware SPI
-Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
+// Instantiate Adafruit ILI9341 driver using custom hardware HSPI
+SPIClass hspi(HSPI);
+Adafruit_ILI9341 tft = Adafruit_ILI9341(&hspi, TFT_DC, TFT_CS, TFT_RST);
 
 void initTFT() {
     Serial.println("[TFT] Initializing SPI display...");
     
-    // Explicit SPI pins configuration
-    SPI.begin(TFT_SCLK, TFT_MISO, TFT_MOSI, TFT_CS);
+    // Explicit SPI pins configuration on HSPI
+    hspi.begin(TFT_SCLK, TFT_MISO, TFT_MOSI, TFT_CS);
     
     tft.begin();
     tft.setRotation(TFT_ROTATION);
