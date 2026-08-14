@@ -20,7 +20,7 @@ void initTFT() {
     // Pass -1 to ss_pin to let Adafruit library manually control CS pin 15
     hspi.begin(TFT_SCLK, TFT_MISO, TFT_MOSI, -1);
     
-    tft.begin();
+    tft.begin(16000000); // Set SPI speed to 16MHz for better signal stability
     tft.setRotation(TFT_ROTATION);
     tft.fillScreen(ILI9341_BLACK);
 
