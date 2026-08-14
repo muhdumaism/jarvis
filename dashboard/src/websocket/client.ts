@@ -26,10 +26,8 @@ export const connectWebSocket = (): void => {
   const host = window.location.host;
   const hostname = window.location.hostname;
   
-  // Use config server endpoint if running in dev mode
-  const wsUrl = import.meta.env.DEV 
-    ? `ws://${hostname}:8000/ws` 
-    : `${protocol}//${host}/ws`;
+  // Proxy through Vite's server proxy to support tunnels, secure contexts, and local IPs cleanly
+  const wsUrl = `${protocol}//${host}/ws`;
 
   ws = new WebSocket(wsUrl);
 
