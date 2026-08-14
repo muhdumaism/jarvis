@@ -153,24 +153,41 @@ JSON:"""
             end = response.index("```", start)
             response = response[start:end].strip()
 
+        parsed = None
+
         # Find JSON object
         try:
             # Try direct parse
-            return json.loads(response)
+            parsed = json.loads(response)
         except json.JSONDecodeError:
-            pass
+            # Try to find JSON object in the response
+            brace_start = response.find("{")
+            brace_end = response.rfind("}") + 1
+            if brace_start >= 0 and brace_end > brace_start:
+                try:
+                    parsed = json.loads(response[brace_start:brace_end])
+                except json.JSONDecodeError:
+                    pass
 
-        # Try to find JSON object in the response
-        brace_start = response.find("{")
-        brace_end = response.rfind("}") + 1
-        if brace_start >= 0 and brace_end > brace_start:
-            try:
-                return json.loads(response[brace_start:brace_end])
-            except json.JSONDecodeError:
-                pass
+        # Fallback: treat as conversation if parse failed
+        if not parsed:
+            parsed = {"intent": "conversation", "response": response[:200]}
 
-        # Fallback: treat as conversation
-        return {"intent": "conversation", "response": response[:200]}
+        # Check for nested JSON intent inside a conversation response (common with small models like llama3.2:1b)
+        if isinstance(parsed, dict) and parsed.get("intent") == "conversation":
+            resp_str = parsed.get("response", "").strip()
+            brace_start = resp_str.find("{")
+            brace_end = resp_str.rfind("}") + 1
+            if brace_start >= 0 and brace_end > brace_start:
+                try:
+                    nested = json.loads(resp_str[brace_start:brace_end])
+                    if isinstance(nested, dict) and "intent" in nested:
+                        logger.info("intent.parser.nested_fallback", nested_intent=nested["intent"])
+                        return nested
+                except json.JSONDecodeError:
+                    pass
+
+        return parsed
 
     async def _execute_intent(
         self, intent_data: Dict[str, Any], message_id: str
