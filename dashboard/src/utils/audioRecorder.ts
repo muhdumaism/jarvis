@@ -16,6 +16,12 @@ export class AudioRecorder {
   }
 
   public async start(): Promise<void> {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error(
+        "Microphone is blocked. You must use HTTPS (e.g. ngrok tunnel) or configure Chrome flags for secure context access."
+      );
+    }
+
     // 1. Get browser microphone media stream
     this.mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
