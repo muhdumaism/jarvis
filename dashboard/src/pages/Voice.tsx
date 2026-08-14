@@ -5,7 +5,6 @@ import { Mic, MicOff, Cpu, Zap, Volume2, Settings, Loader2 } from 'lucide-react'
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { AudioRecorder } from '../utils/audioRecorder';
 import { sendWSMessage } from '../websocket/client';
-import { RobotAvatar } from '../components/RobotAvatar';
 
 export const Voice: React.FC = () => {
   const { voice, systemStats, music } = useJarvisStore();
@@ -279,8 +278,6 @@ export const Voice: React.FC = () => {
                 Web Voice Terminal
               </h3>
 
-              {/* Animated Robot Avatar */}
-              <RobotAvatar state={getAvatarState()} />
 
               {/* Large interactive glowing button */}
               <button
