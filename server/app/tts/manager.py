@@ -14,6 +14,11 @@ from app.core.config import settings
 from app.core.events import EventBus, JarvisEvent
 from app.tts.piper_provider import PiperTTSProvider
 
+try:
+    import winsound
+except ImportError:
+    winsound = None
+
 import structlog
 
 logger = structlog.get_logger("jarvis.tts.manager")
@@ -100,6 +105,10 @@ class TTSManager:
                     logger.warning("tts.no_audio_generated", message_id=msg_id)
                     continue
 
+                if settings.play_tts_on_pc:
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, self._play_audio_locally, pcm_data)
+
                 # Publish TTS_START event
                 # Sample rate defaults to Piper (usually 22050), channels=1, 16bit signed
                 total_len = len(pcm_data)
@@ -162,3 +171,38 @@ class TTSManager:
                 logger.error("tts.processing_error", error=str(e), message_id=msg_id)
             finally:
                 self._queue.task_done()
+
+    def _play_audio_locally(self, pcm_data: bytes) -> None:
+        """Play raw PCM audio on the local Windows PC using winsound."""
+        if not winsound:
+            logger.warning("tts.local_playback.failed", reason="winsound module not available (non-Windows platform)")
+            return
+            
+        import wave
+        import io
+        import tempfile
+        import os
+        
+        try:
+            # Create in-memory WAV file from raw PCM bytes
+            wav_buf = io.BytesIO()
+            with wave.open(wav_buf, "wb") as wav_file:
+                wav_file.setnchannels(1)  # Mono
+                wav_file.setsampwidth(2)  # 16-bit
+                wav_file.setframerate(self.provider.sample_rate)
+                wav_file.writeframes(pcm_data)
+            
+            # Write to a temporary file
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                f.write(wav_buf.getvalue())
+                temp_path = f.name
+            
+            # Play synchronously inside the executor thread
+            winsound.PlaySound(temp_path, winsound.SND_FILENAME)
+            
+            # Clean up temp file
+            os.remove(temp_path)
+            logger.info("tts.local_playback.success")
+            
+        except Exception as e:
+            logger.error("tts.local_playback.error", error=str(e))

@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     piper_model_path: str = "./models/piper/en_US-lessac-medium.onnx"
     piper_config_path: str = "./models/piper/en_US-lessac-medium.onnx.json"
     tts_sample_rate: int = 22050
+    play_tts_on_pc: bool = False
 
     # --- Spotify ---
     spotify_client_id: str = ""
