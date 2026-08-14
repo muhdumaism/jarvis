@@ -13,6 +13,15 @@ int trackPosition = 0;
 int trackDuration = 0;
 unsigned long lastMusicUpdate = 0;
 
+// Room Assistant status variables
+int activeLightsCount = 0;
+bool isFanActive = false;
+float roomTemperature = 26.5;
+bool doorLocked = true;
+
+char lastUserQuery[64] = "Waiting...";
+char lastJarvisReply[64] = "Hello, Umais.";
+
 // Rendering state caches to reduce SPI bandwidth usage
 static char lastTitle[64] = "";
 static char lastArtist[64] = "";
@@ -29,6 +38,16 @@ void initUI() {
     initEyes();
 }
 
+// Static cache variables for left/right dashboard panels
+static int lastActiveLightsCount = -1;
+static bool lastIsFanActive = false;
+static float lastRoomTemperature = -1.0;
+static bool lastDoorLocked = false;
+
+static char lastUserQueryCache[64] = "";
+static char lastJarvisReplyCache[64] = "";
+static char lastDashboardState[32] = "";
+
 void invalidateUICaches() {
     lastTitle[0] = '\0';
     lastArtist[0] = '\0';
@@ -39,6 +58,16 @@ void invalidateUICaches() {
     lastSystemState[0] = '\0';
     lastHeaderDraw = 0;
     lastDrawnState[0] = '\0';
+    
+    // Invalidate Room Assistant panels caches
+    lastActiveLightsCount = -1;
+    lastIsFanActive = !isFanActive;
+    lastRoomTemperature = -1.0;
+    lastDoorLocked = !doorLocked;
+    
+    lastUserQueryCache[0] = '\0';
+    lastJarvisReplyCache[0] = '\0';
+    lastDashboardState[0] = '\0';
     
     // Reset the coordinate caches inside eyes.cpp
     resetEyesDrawCache();
@@ -204,6 +233,184 @@ void drawBackendDisconnectedScreen() {
     tft.print("Reconnecting to JARVIS Backend...");
 }
 
+void drawWrappedText(const char* text, int x, int y, int maxChars, int maxLines) {
+    int len = strlen(text);
+    int start = 0;
+    int line = 0;
+    while (start < len && line < maxLines) {
+        int chars = maxChars;
+        if (start + chars > len) {
+            chars = len - start;
+        } else {
+            // Wrap on word boundary if possible
+            int lastSpace = -1;
+            for (int i = start + chars - 1; i >= start; i--) {
+                if (text[i] == ' ') {
+                    lastSpace = i;
+                    break;
+                }
+            }
+            if (lastSpace != -1) {
+                chars = lastSpace - start;
+            }
+        }
+        
+        char lineBuf[24];
+        if (chars >= sizeof(lineBuf)) chars = sizeof(lineBuf) - 1;
+        strncpy(lineBuf, text + start, chars);
+        lineBuf[chars] = '\0';
+        
+        tft.setCursor(x, y + (line * 10));
+        tft.print(lineBuf);
+        
+        start += chars;
+        if (start < len && text[start] == ' ') start++; // skip space
+        line++;
+    }
+}
+
+void drawDashboardLayout() {
+    // 1. Draw static dividers and frames once
+    static bool dividersDrawn = false;
+    if (!dividersDrawn || strcmp(currentSystemState, lastDashboardState) != 0) {
+        tft.drawFastVLine(106, 24, TFT_HEIGHT - 24, ILI9341_DARKGREY);
+        tft.drawFastVLine(214, 24, TFT_HEIGHT - 24, ILI9341_DARKGREY);
+        tft.drawRoundRect(217, 30, 100, 202, 4, ILI9341_DARKGREY);
+        
+        dividersDrawn = true;
+        strncpy(lastDashboardState, currentSystemState, sizeof(lastDashboardState) - 1);
+        lastDashboardState[sizeof(lastDashboardState) - 1] = '\0';
+    }
+
+    // 2. Draw Left Column (Room Telemetry Cards)
+    bool leftChanged = (activeLightsCount != lastActiveLightsCount ||
+                        isFanActive != lastIsFanActive ||
+                        abs(roomTemperature - lastRoomTemperature) > 0.05 ||
+                        doorLocked != lastDoorLocked);
+                        
+    if (leftChanged) {
+        // Clear panel area X: 0 to 105, Y: 25 to 240
+        tft.fillRect(0, 25, 105, TFT_HEIGHT - 25, ILI9341_BLACK);
+        
+        // Temperature
+        tft.setTextColor(ILI9341_ORANGE);
+        tft.setTextSize(1);
+        tft.setCursor(6, 32);
+        tft.print("ROOM TEMP");
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setTextSize(2);
+        tft.setCursor(6, 44);
+        tft.printf("%.1f C", roomTemperature);
+
+        // Lights
+        tft.setTextColor(ILI9341_YELLOW);
+        tft.setTextSize(1);
+        tft.setCursor(6, 82);
+        tft.print("LIGHTS");
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setTextSize(2);
+        tft.setCursor(6, 94);
+        if (activeLightsCount > 0) {
+            tft.printf("%d ON", activeLightsCount);
+        } else {
+            tft.print("OFF");
+        }
+
+        // Fan
+        tft.setTextColor(ILI9341_GREEN);
+        tft.setTextSize(1);
+        tft.setCursor(6, 132);
+        tft.print("FAN");
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setTextSize(2);
+        tft.setCursor(6, 144);
+        tft.print(isFanActive ? "RUNNING" : "STOPPED");
+
+        // Door Lock
+        tft.setTextColor(ILI9341_RED);
+        tft.setTextSize(1);
+        tft.setCursor(6, 182);
+        tft.print("SECURITY");
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setTextSize(2);
+        tft.setCursor(6, 194);
+        tft.print(doorLocked ? "LOCKED" : "OPEN");
+
+        lastActiveLightsCount = activeLightsCount;
+        lastIsFanActive = isFanActive;
+        lastRoomTemperature = roomTemperature;
+        lastDoorLocked = doorLocked;
+    }
+
+    // 3. Draw Right Column (Speech Bubble)
+    bool rightChanged = (strcmp(lastUserQuery, lastUserQueryCache) != 0 ||
+                         strcmp(lastJarvisReply, lastJarvisReplyCache) != 0);
+                         
+    if (rightChanged) {
+        tft.fillRect(218, 31, 95, 200, ILI9341_BLACK);
+        tft.drawRoundRect(217, 30, 100, 202, 4, ILI9341_DARKGREY);
+
+        // User Query
+        tft.setTextColor(ILI9341_CYAN);
+        tft.setTextSize(1);
+        tft.setCursor(221, 36);
+        tft.print("UMAI:");
+        
+        tft.setTextColor(ILI9341_WHITE);
+        drawWrappedText(lastUserQuery, 221, 47, 15, 6);
+
+        // Assistant Response
+        tft.setTextColor(ILI9341_BLUE);
+        tft.setTextSize(1);
+        tft.setCursor(221, 115);
+        tft.print("JARVIS:");
+        
+        tft.setTextColor(ILI9341_GREEN);
+        drawWrappedText(lastJarvisReply, 221, 126, 15, 9);
+
+        strncpy(lastUserQueryCache, lastUserQuery, sizeof(lastUserQueryCache) - 1);
+        lastUserQueryCache[sizeof(lastUserQueryCache) - 1] = '\0';
+        strncpy(lastJarvisReplyCache, lastJarvisReply, sizeof(lastJarvisReplyCache) - 1);
+        lastJarvisReplyCache[sizeof(lastJarvisReplyCache) - 1] = '\0';
+    }
+}
+
+void setLastUserQuery(const char* query) {
+    if (strcmp(lastUserQuery, query) != 0) {
+        strncpy(lastUserQuery, query, sizeof(lastUserQuery) - 1);
+        lastUserQuery[sizeof(lastUserQuery) - 1] = '\0';
+    }
+}
+
+void setLastJarvisReply(const char* reply) {
+    if (strcmp(lastJarvisReply, reply) != 0) {
+        strncpy(lastJarvisReply, reply, sizeof(lastJarvisReply) - 1);
+        lastJarvisReply[sizeof(lastJarvisReply) - 1] = '\0';
+    }
+}
+
+void updateTFTDeviceState(const char* deviceId, const char* state) {
+    String id = String(deviceId);
+    String st = String(state);
+    
+    if (id.indexOf("light") >= 0 || id.indexOf("lamp") >= 0) {
+        if (st == "on") {
+            if (activeLightsCount < 4) activeLightsCount++;
+        } else if (st == "off") {
+            if (activeLightsCount > 0) activeLightsCount--;
+        }
+    }
+    else if (id.indexOf("fan") >= 0) {
+        isFanActive = (st == "on");
+    }
+    else if (id.indexOf("door") >= 0 || id.indexOf("lock") >= 0) {
+        doorLocked = (st == "lock" || st == "locked" || st == "on");
+    }
+    else if (id.indexOf("temp") >= 0) {
+        roomTemperature = atof(state);
+    }
+}
+
 void updateUI() {
     drawHeader();
 
@@ -231,15 +438,9 @@ void updateUI() {
             lastDrawnState[sizeof(lastDrawnState) - 1] = '\0';
         }
     } else {
-        // Standard non-music rendering
+        // Holographic split room dashboard rendering
+        drawDashboardLayout();
         updateEyes(currentSystemState);
         drawEyes();
-        
-        static char lastStatusOverlay[32] = "";
-        if (strcmp(currentSystemState, lastStatusOverlay) != 0) {
-            drawStatusOverlay(currentSystemState, ILI9341_CYAN);
-            strncpy(lastStatusOverlay, currentSystemState, sizeof(lastStatusOverlay) - 1);
-            lastStatusOverlay[sizeof(lastStatusOverlay) - 1] = '\0';
-        }
     }
 }

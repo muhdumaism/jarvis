@@ -165,8 +165,15 @@ void handleWebSocketMessage(WStype_t type, uint8_t * payload, size_t length) {
                 else if (strcmp(msgType, "VOICE_THINKING") == 0) {
                     setSystemState("THINKING");
                 }
+                else if (strcmp(msgType, "VOICE_TRANSCRIBED") == 0) {
+                    setLastUserQuery(doc["message"] | "");
+                }
                 else if (strcmp(msgType, "ASSISTANT_RESPONSE") == 0) {
+                    setLastJarvisReply(doc["message"] | "");
                     setSystemState("IDLE");
+                }
+                else if (strcmp(msgType, "DEVICE_STATE_CHANGED") == 0 || strcmp(msgType, "DEVICE_COMMAND") == 0) {
+                    updateTFTDeviceState(doc["device_id"] | "", doc["state"] | "");
                 }
             }
             break;

@@ -10,22 +10,22 @@ unsigned long blinkStartTime = 0;
 const int blinkDuration = 150; // 150ms blink speed
 
 void initEyes() {
-    int eyeSpacing = 80;
-    int centerY = TFT_HEIGHT / 2 - 10;
+    int eyeSpacing = 52;
+    int centerY = 110;
     
     // Left Eye configuration
-    leftEye.x = TFT_WIDTH / 2 - eyeSpacing / 2;
+    leftEye.x = TFT_WIDTH / 2 - eyeSpacing / 2; // 160 - 26 = 134
     leftEye.y = centerY;
-    leftEye.r = 30;
+    leftEye.r = 18; // Smaller to fit inside center hologram circle
     leftEye.targetX = leftEye.x;
     leftEye.targetY = leftEye.y;
     leftEye.currentX = leftEye.x;
     leftEye.currentY = leftEye.y;
 
     // Right Eye configuration
-    rightEye.x = TFT_WIDTH / 2 + eyeSpacing / 2;
+    rightEye.x = TFT_WIDTH / 2 + eyeSpacing / 2; // 160 + 26 = 186
     rightEye.y = centerY;
-    rightEye.r = 30;
+    rightEye.r = 18;
     rightEye.targetX = rightEye.x;
     rightEye.targetY = rightEye.y;
     rightEye.currentX = rightEye.x;
@@ -159,8 +159,12 @@ void drawEyes() {
                       strcmp(currentEyeState, lastDrawnEyeState) != 0);
 
     if (eyesMoved) {
-        // Clear only the bounding box of the eyes to save SPI bandwidth
-        tft.fillRect(0, 30, TFT_WIDTH, 115, ILI9341_BLACK);
+        // Clear only the bounding box of the center circular assistant area (X: 108 to 212, Y: 55 to 165)
+        tft.fillRect(108, 55, 104, 110, ILI9341_BLACK);
+
+        // Draw center circular hologram rings
+        tft.drawCircle(160, 110, 48, ILI9341_BLUE);
+        tft.drawCircle(160, 110, 51, ILI9341_DARKGREY);
 
         if (isBlinking) {
             // Draw blink state as horizontal lines
@@ -175,24 +179,24 @@ void drawEyes() {
             tft.fillCircle(leftEye.currentX, leftEye.currentY, leftPupilR, ILI9341_CYAN);
             tft.fillCircle(rightEye.currentX, rightEye.currentY, rightPupilR, ILI9341_CYAN);
 
-            // Draw expressive eyebrows based on states
+            // Draw expressive eyebrows based on states (adjusted to fit smaller radius)
             if (strcmp(currentEyeState, "LISTENING") == 0) {
                 // Raise eyebrows high (curious/attentive)
-                tft.drawFastHLine(leftEye.x - 20, leftEye.y - 38, 40, ILI9341_CYAN);
-                tft.drawFastHLine(rightEye.x - 20, rightEye.y - 38, 40, ILI9341_CYAN);
+                tft.drawFastHLine(leftEye.x - 14, leftEye.y - 27, 28, ILI9341_CYAN);
+                tft.drawFastHLine(rightEye.x - 14, rightEye.y - 27, 28, ILI9341_CYAN);
             } else if (strcmp(currentEyeState, "THINKING") == 0) {
                 // Slant eyebrows inwards (focused frowny eyebrows)
-                tft.drawLine(leftEye.x - 20, leftEye.y - 34, leftEye.x + 15, leftEye.y - 40, ILI9341_CYAN);
-                tft.drawLine(rightEye.x - 15, rightEye.y - 40, rightEye.x + 20, rightEye.y - 34, ILI9341_CYAN);
+                tft.drawLine(leftEye.x - 14, leftEye.y - 23, leftEye.x + 11, leftEye.y - 28, ILI9341_CYAN);
+                tft.drawLine(rightEye.x - 11, rightEye.y - 28, rightEye.x + 14, rightEye.y - 23, ILI9341_CYAN);
             } else if (strcmp(currentEyeState, "SPEAKING") == 0) {
                 // Bouncing eyebrows matching speech sine wave
-                int yOffset = (int)(2.0 * sin(millis() / 120.0));
-                tft.drawFastHLine(leftEye.x - 20, leftEye.y - 36 + yOffset, 40, ILI9341_CYAN);
-                tft.drawFastHLine(rightEye.x - 20, rightEye.y - 36 + yOffset, 40, ILI9341_CYAN);
+                int yOffset = (int)(1.5 * sin(millis() / 120.0));
+                tft.drawFastHLine(leftEye.x - 14, leftEye.y - 25 + yOffset, 28, ILI9341_CYAN);
+                tft.drawFastHLine(rightEye.x - 14, rightEye.y - 25 + yOffset, 28, ILI9341_CYAN);
             } else {
                 // Relaxed horizontal eyebrows
-                tft.drawFastHLine(leftEye.x - 20, leftEye.y - 35, 40, ILI9341_CYAN);
-                tft.drawFastHLine(rightEye.x - 20, rightEye.y - 35, 40, ILI9341_CYAN);
+                tft.drawFastHLine(leftEye.x - 14, leftEye.y - 24, 28, ILI9341_CYAN);
+                tft.drawFastHLine(rightEye.x - 14, rightEye.y - 24, 28, ILI9341_CYAN);
             }
         }
 
