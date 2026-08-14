@@ -159,6 +159,134 @@ void drawThickUpperArc(int x0, int y0, int r, int thickness, uint16_t color) {
     }
 }
 
+void drawRobot(int centerX, int centerY, const char* state, bool isBlinking) {
+    // Colors
+    uint16_t DarkBrown = 0x4901;
+    uint16_t GoldMain = 0xFEC8;
+    uint16_t GoldLight = 0xFFF6;
+    uint16_t GoldShadow = 0xE520;
+    uint16_t MintGreen = 0x3F2A;
+    uint16_t VisorBlack = 0x18C3;
+    uint16_t Cyan = ILI9341_CYAN;
+    uint16_t Red = ILI9341_RED;
+
+    // Bobbing animations based on state
+    int bodyBob = 0;
+    int earBob = 0;
+    
+    if (strcmp(state, "SPEAKING") == 0) {
+        bodyBob = (int)(2.0 * sin(millis() / 150.0));
+        earBob = (int)(3.0 * sin(millis() / 150.0 + 1.0));
+    } else if (strcmp(state, "LISTENING") == 0) {
+        bodyBob = (int)(1.0 * sin(millis() / 100.0));
+        earBob = -3; // Ears perk up
+    } else if (strcmp(state, "THINKING") == 0) {
+        bodyBob = (int)(3.0 * sin(millis() / 80.0));
+        earBob = (int)(4.0 * cos(millis() / 80.0));
+    } else if (strcmp(state, "ALARM_TRIGGERED") == 0) {
+        bodyBob = (int)(4.0 * sin(millis() / 50.0)); // Shaking
+        earBob = 2; // Ears droop
+    } else {
+        // Idle bobbing
+        bodyBob = (int)(1.5 * sin(millis() / 250.0));
+        earBob = (int)(1.5 * sin(millis() / 250.0));
+    }
+
+    int cy = centerY + bodyBob;
+
+    // 1. Draw Left Ear
+    tft.fillTriangle(centerX - 27, cy - 35 + earBob, centerX - 37, cy - 12 + earBob, centerX - 17, cy - 10 + earBob, DarkBrown);
+    tft.fillTriangle(centerX - 27, cy - 33 + earBob, centerX - 35, cy - 12 + earBob, centerX - 18, cy - 11 + earBob, GoldMain);
+    tft.drawLine(centerX - 24, cy - 25 + earBob, centerX - 29, cy - 12 + earBob, GoldShadow);
+    tft.drawLine(centerX - 35, cy - 12 + earBob, centerX - 18, cy - 11 + earBob, MintGreen);
+
+    // 2. Draw Right Ear
+    tft.fillTriangle(centerX + 27, cy - 35 + earBob, centerX + 17, cy - 10 + earBob, centerX + 37, cy - 12 + earBob, DarkBrown);
+    tft.fillTriangle(centerX + 27, cy - 33 + earBob, centerX + 18, cy - 11 + earBob, centerX + 35, cy - 12 + earBob, GoldMain);
+    tft.drawLine(centerX + 24, cy - 25 + earBob, centerX + 29, cy - 12 + earBob, GoldShadow);
+    tft.drawLine(centerX + 18, cy - 11 + earBob, centerX + 35, cy - 12 + earBob, MintGreen);
+
+    // 3. Draw Body
+    tft.fillCircle(centerX, cy, 33, DarkBrown);
+    tft.fillCircle(centerX, cy, 31, GoldMain);
+    for (int r = 26; r <= 30; r++) {
+        tft.drawCircleHelper(centerX + 1, cy + 1, r, 2, GoldShadow);
+        tft.drawCircleHelper(centerX + 1, cy + 1, r, 4, GoldShadow);
+    }
+    tft.fillCircle(centerX - 13, cy - 13, 5, GoldLight);
+    tft.drawCircleHelper(centerX, cy, 29, 4, MintGreen);
+    tft.drawCircleHelper(centerX, cy, 28, 4, MintGreen);
+
+    // Earpieces
+    tft.fillCircle(centerX - 31, cy, 5, DarkBrown);
+    tft.fillCircle(centerX - 31, cy, 3, VisorBlack);
+    tft.fillCircle(centerX + 31, cy, 5, DarkBrown);
+    tft.fillCircle(centerX + 31, cy, 3, VisorBlack);
+
+    // 4. Draw Visor
+    uint16_t visorBg = (strcmp(state, "ALARM_TRIGGERED") == 0) ? tft.color565(120, 0, 0) : VisorBlack;
+    tft.fillRoundRect(centerX - 22, cy - 8, 44, 18, 5, DarkBrown);
+    tft.fillRoundRect(centerX - 20, cy - 7, 40, 16, 4, visorBg);
+
+    // 5. Draw Face
+    if (strcmp(state, "THINKING") == 0) {
+        int scan = (millis() / 120) % 4;
+        if (scan == 0) {
+            tft.fillRect(centerX - 12, cy - 4, 4, 2, Cyan);
+            tft.fillRect(centerX + 8, cy - 4, 4, 2, Cyan);
+        } else if (scan == 1) {
+            tft.fillRect(centerX - 10, cy - 6, 2, 4, Cyan);
+            tft.fillRect(centerX + 10, cy - 6, 2, 4, Cyan);
+        } else if (scan == 2) {
+            tft.fillRect(centerX - 12, cy - 2, 4, 2, Cyan);
+            tft.fillRect(centerX + 8, cy - 2, 4, 2, Cyan);
+        } else {
+            tft.fillRect(centerX - 14, cy - 6, 2, 4, Cyan);
+            tft.fillRect(centerX + 6, cy - 6, 2, 4, Cyan);
+        }
+        tft.drawLine(centerX - 4, cy + 4, centerX - 2, cy + 6, Cyan);
+        tft.drawLine(centerX - 2, cy + 6, centerX, cy + 4, Cyan);
+        tft.drawLine(centerX, cy + 4, centerX + 2, cy + 6, Cyan);
+        tft.drawLine(centerX + 2, cy + 6, centerX + 4, cy + 4, Cyan);
+    } 
+    else if (strcmp(state, "LISTENING") == 0) {
+        tft.fillCircle(centerX - 11, cy - 3, 3, Cyan);
+        tft.fillCircle(centerX + 11, cy - 3, 3, Cyan);
+        tft.fillCircle(centerX - 11, cy - 3, 1, VisorBlack);
+        tft.fillCircle(centerX + 11, cy - 3, 1, VisorBlack);
+        tft.drawCircle(centerX, cy + 4, 2, Cyan);
+    } 
+    else if (strcmp(state, "ALARM_TRIGGERED") == 0) {
+        tft.drawLine(centerX - 13, cy - 1, centerX - 9, cy - 4, Red);
+        tft.drawLine(centerX + 9, cy - 4, centerX + 13, cy - 1, Red);
+        tft.drawLine(centerX - 3, cy + 5, centerX, cy + 3, Red);
+        tft.drawLine(centerX, cy + 3, centerX + 3, cy + 5, Red);
+        tft.drawFastVLine(centerX - 11, cy + 1, 10, Cyan);
+        tft.drawFastVLine(centerX + 11, cy + 1, 10, Cyan);
+    } 
+    else {
+        if (isBlinking) {
+            tft.drawFastHLine(centerX - 13, cy - 3, 6, Cyan);
+            tft.drawFastHLine(centerX + 7, cy - 3, 6, Cyan);
+        } else {
+            tft.fillRoundRect(centerX - 13, cy - 5, 5, 5, 1, Cyan);
+            tft.fillRoundRect(centerX + 8, cy - 5, 5, 5, 1, Cyan);
+        }
+        if (strcmp(state, "SPEAKING") == 0) {
+            if ((millis() / 150) % 2 == 0) {
+                tft.fillRoundRect(centerX - 2, cy + 3, 4, 4, 1, Cyan);
+            } else {
+                tft.drawFastHLine(centerX - 2, cy + 4, 4, Cyan);
+            }
+        } else {
+            tft.drawLine(centerX - 4, cy + 4, centerX - 2, cy + 6, Cyan);
+            tft.drawLine(centerX - 2, cy + 6, centerX, cy + 4, Cyan);
+            tft.drawLine(centerX, cy + 4, centerX + 2, cy + 6, Cyan);
+            tft.drawLine(centerX + 2, cy + 6, centerX + 4, cy + 4, Cyan);
+        }
+    }
+}
+
 void drawEyes() {
     bool isMusicMode = (currentTitle[0] != '\0' && 
                         strcmp(currentSystemState, "BACKEND_DISCONNECTED") != 0 &&
@@ -171,24 +299,14 @@ void drawEyes() {
     }
 
     // Determine Y coordinate based on mode and bobbing
-    int leftEyeY = isMusicMode ? (145 + bobOffset) : 120;
-    int rightEyeY = isMusicMode ? (145 + bobOffset) : 120;
+    int leftEyeY = isMusicMode ? (145 + bobOffset) : 110;
+    int rightEyeY = isMusicMode ? (145 + bobOffset) : 110;
 
-    // Adjust vertical offset slightly in assistant mode based on status
-    if (!isMusicMode) {
-        if (strcmp(currentEyeState, "SPEAKING") == 0) {
-            leftEyeY += (int)(2.0 * sin(millis() / 120.0));
-            rightEyeY += (int)(2.0 * sin(millis() / 120.0));
-        } else if (strcmp(currentEyeState, "LISTENING") == 0) {
-            leftEyeY -= 4; // Widen slightly
-            rightEyeY -= 4;
-        }
-    }
-
-    // Force eyesMoved to be true in music mode to keep the bobbing animation going
+    // Force eyesMoved to be true in music mode or animated states to keep bobbing active
     bool eyesMoved = (leftEyeY != lastLeftEyeY || rightEyeY != lastRightEyeY ||
                       isBlinking != lastBlinking ||
                       isMusicMode || 
+                      strcmp(currentEyeState, "IDLE") != 0 || // Always update for assistant bobbing
                       strcmp(currentEyeState, lastDrawnEyeState) != 0);
 
     if (eyesMoved) {
@@ -206,21 +324,14 @@ void drawEyes() {
                 drawThickUpperArc(185, rightEyeY, r, thick, ILI9341_CYAN);
             }
         } else {
-            // Clear assistant eyes bounding box (X: 70 to 250, Y: 70 to 140)
-            tft.fillRect(70, 70, 180, 70, ILI9341_BLACK);
+            // Clear assistant robot bounding box (X: 115 to 205, Y: 60 to 158)
+            tft.fillRect(115, 60, 90, 98, ILI9341_BLACK);
 
-            int r = 28;
-            int thick = 5;
-            if (isBlinking) {
-                tft.drawFastHLine(120 - r, leftEyeY, r * 2, ILI9341_CYAN);
-                tft.drawFastHLine(200 - r, rightEyeY, r * 2, ILI9341_CYAN);
-            } else {
-                drawThickUpperArc(120, leftEyeY, r, thick, ILI9341_CYAN);
-                drawThickUpperArc(200, rightEyeY, r, thick, ILI9341_CYAN);
-            }
+            // Draw full animated robot character!
+            drawRobot(160, 110, currentEyeState, isBlinking);
         }
 
-        lastLeftEyeX = leftEye.currentX; // retain coordinates alignment
+        lastLeftEyeX = leftEye.currentX; 
         lastLeftEyeY = leftEyeY;
         lastRightEyeX = rightEye.currentX;
         lastRightEyeY = rightEyeY;

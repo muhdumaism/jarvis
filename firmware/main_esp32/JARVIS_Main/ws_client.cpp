@@ -174,6 +174,12 @@ void handleWebSocketMessage(WStype_t type, uint8_t * payload, size_t length) {
                     setLastJarvisReply(doc["message"] | "");
                     setSystemState("IDLE");
                 }
+                else if (strcmp(msgType, "ALARM_TRIGGERED") == 0) {
+                    setSystemState("ALARM_TRIGGERED");
+                }
+                else if (strcmp(msgType, "ALARM_STOPPED") == 0) {
+                    setSystemState("IDLE");
+                }
                 else if (strcmp(msgType, "DEVICE_STATE_CHANGED") == 0 || strcmp(msgType, "DEVICE_COMMAND") == 0) {
                     updateTFTDeviceState(doc["device_id"] | "", doc["state"] | "");
                 }
