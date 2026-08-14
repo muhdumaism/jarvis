@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     spotify_poll_interval: int = 5
 
     # --- Bluetooth Speaker ---
-    bluetooth_speaker_name: str = "JBL Go"
+    bluetooth_speaker_name: str = "default"
 
     # --- ESP32 ---
     esp32_api_key: str = "CHANGE_ME_GENERATE_A_REAL_KEY"

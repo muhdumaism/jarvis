@@ -51,8 +51,8 @@ def is_bluetooth_speaker_connected(speaker_name: str) -> bool:
     if not IS_WINDOWS:
         return True # Fallback for non-Windows platforms
         
-    if not speaker_name:
-        return False
+    if not speaker_name or speaker_name.lower() in ["default", "any", "none", ""]:
+        return True
         
     devices = get_windows_audio_devices()
     speaker_name_lower = speaker_name.lower()
