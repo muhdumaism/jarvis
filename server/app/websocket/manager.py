@@ -15,6 +15,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from app.core.security import authenticate_websocket
 from app.core.events import EventBus, JarvisEvent
 from app.core.rate_limiter import ws_limiter
+from app.core.config import settings
 
 import structlog
 
@@ -112,7 +113,9 @@ class WebSocketManager:
     async def send_to_esp32(self, message: dict) -> bool:
         """Send a message to the main ESP32."""
         if not self._esp32_client:
-            logger.warning("ws.esp32_not_connected")
+            # Only print warning for non-TTS_AUDIO messages to prevent flooding logs
+            if message.get("type") != "TTS_AUDIO":
+                logger.warning("ws.esp32_not_connected")
             return False
         return await self.send_to_client(self._esp32_client.client_id, message)
 
@@ -178,6 +181,10 @@ class WebSocketManager:
 
     async def _send_to_esp32(self, event: JarvisEvent) -> None:
         """Send TTS/audio events directly to ESP32."""
+        # Skip streaming audio chunks to ESP32 if playback is routed locally to PC
+        if event.type == "TTS_AUDIO" and settings.play_tts_on_pc:
+            return
+
         message = {
             "type": event.type,
             "message_id": event.message_id,
