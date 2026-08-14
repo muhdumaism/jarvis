@@ -171,8 +171,18 @@ class IntentEngine:
         ))
 
         # Validate and execute
-        result = await self._execute_intent(intent_data, message_id)
+        try:
+            result = await self._execute_intent(intent_data, message_id)
+        except Exception as e:
+            logger.error("intent_engine.execute_failed", error=str(e), intent=intent_type, message_id=message_id)
+            result = {
+                "intent": intent_type,
+                "success": False,
+                "response_text": "Sorry, something went wrong while executing that.",
+                "data": intent_data,
+            }
 
+        logger.info("intent_engine.result", intent=intent_type, success=result.get("success"), message_id=message_id)
         return result
 
     def _build_prompt(self, text: str, device_list: str) -> str:

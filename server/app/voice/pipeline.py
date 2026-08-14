@@ -246,6 +246,8 @@ class VoicePipeline:
                 await self._publish_error(msg_id, "AI_ERROR", f"Intent processing failed: {e}")
                 return
 
+            logger.info("voice.intent_complete", intent=result.get("intent"), success=result.get("success"), message_id=msg_id)
+
             # If the user issued a music playback intent (e.g. they played a new song or explicitly stopped it),
             # we do not want to auto-resume the old music!
             intent_type = result.get("intent", "")
@@ -254,6 +256,8 @@ class VoicePipeline:
 
             # --- TTS Response ---
             response_text = result.get("response_text", "")
+            logger.info("voice.response_ready", text=response_text[:80] if response_text else "", message_id=msg_id)
+
             if response_text and self.tts and self.tts.is_ready:
                 try:
                     await self.tts.speak(response_text, msg_id)
