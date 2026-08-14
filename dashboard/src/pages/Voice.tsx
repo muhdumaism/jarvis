@@ -5,9 +5,10 @@ import { Mic, MicOff, Cpu, Zap, Volume2, Settings, Loader2 } from 'lucide-react'
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { AudioRecorder } from '../utils/audioRecorder';
 import { sendWSMessage } from '../websocket/client';
+import { RobotAvatar } from '../components/RobotAvatar';
 
 export const Voice: React.FC = () => {
-  const { voice, systemStats } = useJarvisStore();
+  const { voice, systemStats, music } = useJarvisStore();
   const [isRecording, setIsRecording] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
@@ -176,6 +177,15 @@ export const Voice: React.FC = () => {
     }
   };
 
+  const getAvatarState = (): 'idle' | 'listening' | 'thinking' | 'speaking' | 'music' | 'alarm' => {
+    if (voice.isAlarmRinging) return 'alarm';
+    if (voice.status === 'thinking') return 'thinking';
+    if (voice.status === 'speaking') return 'speaking';
+    if (isRecording) return 'listening';
+    if (music.is_playing) return 'music';
+    return 'idle';
+  };
+
   const pipelineSteps = [
     {
       name: 'Microphone Capture',
@@ -268,6 +278,9 @@ export const Voice: React.FC = () => {
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Web Voice Terminal
               </h3>
+
+              {/* Animated Robot Avatar */}
+              <RobotAvatar state={getAvatarState()} />
 
               {/* Large interactive glowing button */}
               <button

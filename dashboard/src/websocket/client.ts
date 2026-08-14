@@ -197,6 +197,15 @@ function handleIncomingMessage(msg: Record<string, any>): void {
       });
       break;
 
+    case 'ALARM_TRIGGERED':
+      store.setVoiceData({ isAlarmRinging: true });
+      store.addToast("Alarm ringing!", 'warning');
+      break;
+
+    case 'ALARM_STOPPED':
+      store.setVoiceData({ isAlarmRinging: false });
+      break;
+
     case 'NOTIFICATION':
       store.addToast(msg.message, msg.level as any);
       break;

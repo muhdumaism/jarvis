@@ -66,6 +66,7 @@ export interface VoiceState {
   target?: string;
   action?: string;
   error?: string;
+  isAlarmRinging?: boolean;
 }
 
 export interface SystemStatus {
