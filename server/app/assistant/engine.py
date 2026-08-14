@@ -142,8 +142,8 @@ For music: {{"intent": "spotify_play|spotify_pause|spotify_resume|spotify_skip|s
 For scene: {{"intent": "scene_activate", "scene_name": "<name>"}}
 For room query: {{"intent": "room_query", "query": "<what to query>"}}
 For weather: {{"intent": "weather_query", "location": "<city name, default to {settings.default_weather_location}>"}}
-For setting alarm: {{"intent": "set_alarm", "time": "HH:MM", "am_pm": "AM|PM", "delay_minutes": <optional number of minutes to wait>}}
-For stopping alarm: {{"intent": "stop_alarm"}}
+For setting alarm or timer: {{"intent": "set_alarm", "time": "HH:MM", "am_pm": "AM|PM", "delay_minutes": <optional minutes as float>, "delay_seconds": <optional seconds as float>, "is_timer": <bool>}}
+For stopping alarm or timer: {{"intent": "stop_alarm"}}
 For conversation: {{"intent": "conversation", "response": "<short friendly reply>"}}
 
 Examples for music:
@@ -531,7 +531,7 @@ JSON:"""
     async def _execute_set_alarm(
         self, intent_data: Dict[str, Any], message_id: str
     ) -> Dict[str, Any]:
-        """Schedule a new alarm using the AlarmManager."""
+        """Schedule a new alarm or timer using the AlarmManager."""
         if not self.alarm_manager:
             return {
                 "intent": "set_alarm",
@@ -543,21 +543,38 @@ JSON:"""
         time_str = intent_data.get("time")
         am_pm = intent_data.get("am_pm")
         delay_minutes = intent_data.get("delay_minutes")
+        delay_seconds = intent_data.get("delay_seconds")
+        is_timer = intent_data.get("is_timer", False)
+        
+        label = "timer" if is_timer else "alarm"
 
         try:
-            if delay_minutes is not None:
-                # Relative alarm
-                trigger_time = await self.alarm_manager.set_alarm_delay(float(delay_minutes))
-                response_text = f"Got it. Alarm set in {delay_minutes} minutes, which will be {trigger_time}."
+            if delay_seconds is not None:
+                secs = float(delay_seconds)
+                trigger_time = await self.alarm_manager.set_alarm_delay(secs / 60.0, label)
+                if label == "timer":
+                    response_text = f"Got it. Timer set for {int(secs)} seconds, which will be {trigger_time}."
+                else:
+                    response_text = f"Got it. Alarm set in {int(secs)} seconds, which will be {trigger_time}."
+            elif delay_minutes is not None:
+                mins = float(delay_minutes)
+                trigger_time = await self.alarm_manager.set_alarm_delay(mins, label)
+                min_str = f"{mins:.1f}" if mins % 1 != 0 else f"{int(mins)}"
+                if label == "timer":
+                    response_text = f"Got it. Timer set for {min_str} minutes, which will be {trigger_time}."
+                else:
+                    response_text = f"Got it. Alarm set in {min_str} minutes, which will be {trigger_time}."
             elif time_str:
-                # Absolute alarm
                 trigger_time = await self.alarm_manager.set_alarm(time_str, am_pm)
-                response_text = f"Got it. Alarm scheduled for {trigger_time}."
+                if label == "timer":
+                    response_text = f"Got it. Timer scheduled for {trigger_time}."
+                else:
+                    response_text = f"Got it. Alarm scheduled for {trigger_time}."
             else:
                 return {
                     "intent": "set_alarm",
                     "success": False,
-                    "response_text": "I need a specific time or delay to set an alarm.",
+                    "response_text": "I need a specific time or delay to set an alarm or timer.",
                     "data": intent_data,
                 }
 
