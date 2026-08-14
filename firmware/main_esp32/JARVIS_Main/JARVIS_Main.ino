@@ -60,7 +60,7 @@ void UITask(void* pvParameters) {
     for (;;) {
         updateUI();
         feedWatchdog();
-        vTaskDelay(pdMS_TO_TICKS(16)); // ~60 FPS update speed
+        vTaskDelay(pdMS_TO_TICKS(33)); // ~30 FPS update speed
     }
 }
 

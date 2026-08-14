@@ -84,21 +84,40 @@ void updateEyes(const char* state) {
     }
 }
 
+static int lastLeftEyeX = -1;
+static int lastLeftEyeY = -1;
+static int lastRightEyeX = -1;
+static int lastRightEyeY = -1;
+static bool lastBlinking = false;
+
 void drawEyes() {
-    // 1. Partial clearing of old eye positions to prevent screen flicker
-    tft.fillRect(0, 30, TFT_WIDTH, TFT_HEIGHT - 60, ILI9341_BLACK);
+    // Check if eyes actually moved or blink status changed
+    bool eyesMoved = (leftEye.currentX != lastLeftEyeX || leftEye.currentY != lastLeftEyeY ||
+                      rightEye.currentX != lastRightEyeX || rightEye.currentY != lastRightEyeY ||
+                      isBlinking != lastBlinking);
 
-    if (isBlinking) {
-        // Draw blink state as horizontal lines
-        tft.drawFastHLine(leftEye.x - leftEye.r, leftEye.y, leftEye.r * 2, ILI9341_CYAN);
-        tft.drawFastHLine(rightEye.x - rightEye.r, rightEye.y, rightEye.r * 2, ILI9341_CYAN);
-    } else {
-        // Draw outer eyeballs
-        tft.drawCircle(leftEye.x, leftEye.y, leftEye.r, ILI9341_CYAN);
-        tft.drawCircle(rightEye.x, rightEye.y, rightEye.r, ILI9341_CYAN);
+    if (eyesMoved) {
+        // Clear only the bounding box of the eyes to save SPI bandwidth
+        tft.fillRect(0, 30, TFT_WIDTH, 115, ILI9341_BLACK);
 
-        // Draw inner pupils (procedurally shifted)
-        tft.fillCircle(leftEye.currentX, leftEye.currentY, leftEye.r / 2, ILI9341_CYAN);
-        tft.fillCircle(rightEye.currentX, rightEye.currentY, rightEye.r / 2, ILI9341_CYAN);
+        if (isBlinking) {
+            // Draw blink state as horizontal lines
+            tft.drawFastHLine(leftEye.x - leftEye.r, leftEye.y, leftEye.r * 2, ILI9341_CYAN);
+            tft.drawFastHLine(rightEye.x - rightEye.r, rightEye.y, rightEye.r * 2, ILI9341_CYAN);
+        } else {
+            // Draw outer eyeballs
+            tft.drawCircle(leftEye.x, leftEye.y, leftEye.r, ILI9341_CYAN);
+            tft.drawCircle(rightEye.x, rightEye.y, rightEye.r, ILI9341_CYAN);
+
+            // Draw inner pupils (procedurally shifted)
+            tft.fillCircle(leftEye.currentX, leftEye.currentY, leftEye.r / 2, ILI9341_CYAN);
+            tft.fillCircle(rightEye.currentX, rightEye.currentY, rightEye.r / 2, ILI9341_CYAN);
+        }
+
+        lastLeftEyeX = leftEye.currentX;
+        lastLeftEyeY = leftEye.currentY;
+        lastRightEyeX = rightEye.currentX;
+        lastRightEyeY = rightEye.currentY;
+        lastBlinking = isBlinking;
     }
 }
