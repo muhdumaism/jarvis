@@ -335,6 +335,29 @@ async def websocket_endpoint(websocket: WebSocket):
             "server_time": datetime.now(timezone.utc).isoformat(),
         })
 
+        # Send current music state to the newly connected ESP32 client immediately to sync UI
+        if client_type == "esp32_main":
+            try:
+                music_manager = websocket.app.state.music_manager
+                state = await music_manager.get_state()
+                track = state.get("track")
+                msg = {
+                    "type": "MUSIC_STATE",
+                    "is_playing": state.get("is_playing", False),
+                    "track": {
+                        "title": track.get("title") if track else "",
+                        "artist": track.get("artist") if track else "",
+                        "position_ms": track.get("position_ms") if track else 0,
+                        "duration_ms": track.get("duration_ms") if track else 0,
+                        "album_art_url": track.get("album_art_url") if track else "",
+                    } if track else None,
+                    "speaker_connected": state.get("speaker_connected", True)
+                }
+                await websocket.send_json(msg)
+                logger.info("ws.esp32_initial_music_state_sent", client_id=client_id)
+            except Exception as e:
+                logger.error("ws.esp32_initial_music_state_failed", error=str(e))
+
         # Message loop
         while True:
             data = await websocket.receive_json()
