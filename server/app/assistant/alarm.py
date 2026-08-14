@@ -148,12 +148,22 @@ class AlarmManager:
                 data={"alarm_id": alarm_id, "label": label}
             ))
 
+            # Start background auto-silence safety task (5 minutes = 300 seconds)
+            asyncio.create_task(self._auto_silence_timer(300.0))
+
             # Loop alternating beeps on default Windows output
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self._play_alarm_loop)
 
         except asyncio.CancelledError:
             logger.info("alarm.cancelled", alarm_id=alarm_id)
+
+    async def _auto_silence_timer(self, timeout: float):
+        """Automatically silence the alarm after the timeout period if still ringing."""
+        await asyncio.sleep(timeout)
+        if self.is_alarm_ringing:
+            logger.info("alarm.auto_silenced", timeout_seconds=timeout)
+            await self.stop_ringing()
 
     def _play_alarm_loop(self):
         """Synchronous loop to play alternating frequency warning tones on the Windows speaker."""

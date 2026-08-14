@@ -85,6 +85,16 @@ class MusicManager:
         state_data["current_output_device"] = curr_output
         return state_data
 
+    async def execute_command(self, action: str, query: Optional[str] = None, value: Optional[Any] = None) -> bool:
+        """Execute a music command directly."""
+        event = JarvisEvent(
+            type="MUSIC_COMMAND",
+            source="internal",
+            data={"action": action, "query": query, "value": value}
+        )
+        await self._on_music_command(event)
+        return True
+
     async def _get_db_setting(self, key: str, default: Optional[str] = None) -> Optional[str]:
         if not self.db:
             return default
