@@ -7,6 +7,7 @@ Validates intents against device registry before execution.
 
 import json
 import asyncio
+import httpx
 from typing import Optional, Dict, Any
 
 from app.assistant.ollama_provider import OllamaProvider
@@ -27,10 +28,11 @@ class IntentEngine:
     The server validates before execution.
     """
 
-    def __init__(self, device_manager, event_bus: EventBus, music_manager=None):
+    def __init__(self, device_manager, event_bus: EventBus, music_manager=None, alarm_manager=None):
         self.device_manager = device_manager
         self.event_bus = event_bus
         self.music_manager = music_manager
+        self.alarm_manager = alarm_manager
         self.llm = OllamaProvider()
         self._ready = False
 
@@ -62,7 +64,7 @@ class IntentEngine:
 
         intent_data = None
 
-        # Rule-based intent overrides for instant and 100% reliable music control
+        # Rule-based intent overrides for instant and 100% reliable music and alarm control
         if cleaned_text in ["stop", "stop music", "stop the music", "pause", "pause music", "pause the music", "stop playback"]:
             intent_data = {"intent": "spotify_stop"}
         elif cleaned_text in ["resume", "resume music", "play music", "play", "resume playback"]:
@@ -71,6 +73,8 @@ class IntentEngine:
             intent_data = {"intent": "spotify_skip"}
         elif cleaned_text in ["previous", "previous song", "previous track", "go back", "play previous"]:
             intent_data = {"intent": "spotify_previous"}
+        elif cleaned_text in ["stop alarm", "cancel alarm", "turn off alarm", "dismiss alarm", "stop ringing", "quiet"]:
+            intent_data = {"intent": "stop_alarm"}
 
         if intent_data is None:
             # Build the device context for the LLM
@@ -137,6 +141,9 @@ For device control: {{"intent": "device_control", "target": "<device_id>", "acti
 For music: {{"intent": "spotify_play|spotify_pause|spotify_resume|spotify_skip|spotify_previous|spotify_volume_up|spotify_volume_down|spotify_current_track|spotify_search|spotify_play_playlist|spotify_play_liked|spotify_stop", "query": "<search query or playlist name>", "value": <optional number>}}
 For scene: {{"intent": "scene_activate", "scene_name": "<name>"}}
 For room query: {{"intent": "room_query", "query": "<what to query>"}}
+For weather: {{"intent": "weather_query", "location": "<city name, default to Delhi>"}}
+For setting alarm: {{"intent": "set_alarm", "time": "HH:MM", "am_pm": "AM|PM", "delay_minutes": <optional number of minutes to wait>}}
+For stopping alarm: {{"intent": "stop_alarm"}}
 For conversation: {{"intent": "conversation", "response": "<short friendly reply>"}}
 
 Examples for music:
@@ -227,6 +234,12 @@ JSON:"""
             return await self._execute_scene(intent_data, message_id)
         elif intent_type == "room_query":
             return await self._execute_room_query(intent_data, message_id)
+        elif intent_type == "weather_query":
+            return await self._execute_weather_query(intent_data, message_id)
+        elif intent_type == "set_alarm":
+            return await self._execute_set_alarm(intent_data, message_id)
+        elif intent_type == "stop_alarm":
+            return await self._execute_stop_alarm(intent_data, message_id)
         elif intent_type == "conversation":
             response = intent_data.get("response", "I'm here to help.")
             return {
@@ -423,5 +436,167 @@ JSON:"""
             "intent": "room_query",
             "success": True,
             "response_text": response,
+            "data": intent_data,
+        }
+
+    async def _execute_weather_query(
+        self, intent_data: Dict[str, Any], message_id: str
+    ) -> Dict[str, Any]:
+        """Execute a weather forecast intent query using Open-Meteo API."""
+        location = intent_data.get("location", "Delhi")
+        
+        # Publish executing event
+        await self.event_bus.publish(JarvisEvent(
+            type="ASSISTANT_EXECUTING",
+            source="intent_engine",
+            message_id=message_id,
+            data={"description": f"Checking weather for {location}"},
+        ))
+
+        try:
+            city = location.strip() if location else "Delhi"
+            
+            # 1. Geocode location name to latitude and longitude
+            geocode_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1&language=en&format=json"
+            async with httpx.AsyncClient() as client:
+                geo_resp = await client.get(geocode_url, timeout=5.0)
+                if geo_resp.status_code != 200:
+                    return {
+                        "intent": "weather_query",
+                        "success": False,
+                        "response_text": "Sorry, I couldn't reach the weather service right now.",
+                        "data": intent_data,
+                    }
+                
+                geo_data = geo_resp.json()
+                results = geo_data.get("results")
+                if not results:
+                    return {
+                        "intent": "weather_query",
+                        "success": False,
+                        "response_text": f"Sorry, I couldn't find the location '{city}'.",
+                        "data": intent_data,
+                    }
+                
+                location_info = results[0]
+                lat = location_info.get("latitude")
+                lon = location_info.get("longitude")
+                formatted_name = f"{location_info.get('name')}, {location_info.get('country')}"
+
+                # 2. Fetch weather forecast using coordinates
+                weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code"
+                weather_resp = await client.get(weather_url, timeout=5.0)
+                if weather_resp.status_code != 200:
+                    return {
+                        "intent": "weather_query",
+                        "success": False,
+                        "response_text": f"Sorry, I couldn't get the forecast for {formatted_name}.",
+                        "data": intent_data,
+                    }
+                
+                weather_data = weather_resp.json()
+                current = weather_data.get("current", {})
+                temp = current.get("temperature_2m", 0.0)
+                code = current.get("weather_code", 0)
+
+                # Map weather codes
+                conditions = {
+                    0: "Clear sky",
+                    1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+                    45: "Foggy", 48: "Depositing rime fog",
+                    51: "Light drizzle", 53: "Moderate drizzle", 55: "Dense drizzle",
+                    61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain",
+                    71: "Slight snow fall", 73: "Moderate snow fall", 75: "Heavy snow fall",
+                    80: "Slight rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
+                    95: "Thunderstorm", 96: "Thunderstorm with slight hail", 99: "Thunderstorm with heavy hail"
+                }
+                condition = conditions.get(code, "Cloudy")
+                
+                response_text = f"The current weather in {formatted_name} is {condition} at {temp:.1f} degrees Celsius."
+                return {
+                    "intent": "weather_query",
+                    "success": True,
+                    "response_text": response_text,
+                    "data": intent_data,
+                }
+        except Exception as e:
+            logger.error("weather.execute_failed", error=str(e))
+            return {
+                "intent": "weather_query",
+                "success": False,
+                "response_text": "Sorry, I had trouble retrieving the weather report.",
+                "data": intent_data,
+            }
+
+    async def _execute_set_alarm(
+        self, intent_data: Dict[str, Any], message_id: str
+    ) -> Dict[str, Any]:
+        """Schedule a new alarm using the AlarmManager."""
+        if not self.alarm_manager:
+            return {
+                "intent": "set_alarm",
+                "success": False,
+                "response_text": "Alarm system is not initialized.",
+                "data": intent_data,
+            }
+
+        time_str = intent_data.get("time")
+        am_pm = intent_data.get("am_pm")
+        delay_minutes = intent_data.get("delay_minutes")
+
+        try:
+            if delay_minutes is not None:
+                # Relative alarm
+                trigger_time = await self.alarm_manager.set_alarm_delay(float(delay_minutes))
+                response_text = f"Got it. Alarm set in {delay_minutes} minutes, which will be {trigger_time}."
+            elif time_str:
+                # Absolute alarm
+                trigger_time = await self.alarm_manager.set_alarm(time_str, am_pm)
+                response_text = f"Got it. Alarm scheduled for {trigger_time}."
+            else:
+                return {
+                    "intent": "set_alarm",
+                    "success": False,
+                    "response_text": "I need a specific time or delay to set an alarm.",
+                    "data": intent_data,
+                }
+
+            return {
+                "intent": "set_alarm",
+                "success": True,
+                "response_text": response_text,
+                "data": intent_data,
+            }
+        except Exception as e:
+            logger.error("alarm.execute_failed", error=str(e))
+            return {
+                "intent": "set_alarm",
+                "success": False,
+                "response_text": f"Sorry, I failed to schedule the alarm: {e}",
+                "data": intent_data,
+            }
+
+    async def _execute_stop_alarm(
+        self, intent_data: Dict[str, Any], message_id: str
+    ) -> Dict[str, Any]:
+        """Silence any currently ringing alarms."""
+        if not self.alarm_manager:
+            return {
+                "intent": "stop_alarm",
+                "success": False,
+                "response_text": "Alarm system is not initialized.",
+                "data": intent_data,
+            }
+
+        stopped = await self.alarm_manager.stop_ringing()
+        if stopped:
+            response_text = "Alarm stopped."
+        else:
+            response_text = "No active alarms are ringing right now."
+
+        return {
+            "intent": "stop_alarm",
+            "success": True,
+            "response_text": response_text,
             "data": intent_data,
         }
