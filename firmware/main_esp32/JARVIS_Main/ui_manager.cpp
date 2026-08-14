@@ -406,13 +406,36 @@ void drawWaveform(int centerX, int centerY) {
 void updateUI() {
     drawHeader();
 
-    bool isMusicMode = (strcmp(currentSystemState, "SPOTIFY_PLAYING") == 0 || 
-                        strcmp(currentSystemState, "SPOTIFY_PAUSED") == 0);
+    static bool lastMusicMode = false;
+    bool isMusicMode = (currentTitle[0] != '\0' && 
+                        strcmp(currentSystemState, "BACKEND_DISCONNECTED") != 0 &&
+                        strcmp(currentSystemState, "SPEAKER_DISCONNECTED") != 0);
+
+    if (isMusicMode != lastMusicMode) {
+        // Layout switched! Clear screen area below header (Y: 30 to 320)
+        tft.fillRect(0, 30, TFT_WIDTH, TFT_HEIGHT - 30, ILI9341_BLACK);
+        
+        // Reset last Title and last Artist to force redrawing metadata
+        lastTitle[0] = '\0';
+        lastArtist[0] = '\0';
+        lastSystemState[0] = '\0';
+        lastTrackPosition = -9999;
+        
+        lastMusicMode = isMusicMode;
+    }
 
     if (isMusicMode) {
         // 1. Music mode UI with Album Art and progress
         drawMusicOverlay(currentSystemState);
-        updateEyes("IDLE"); // Music bobs eyes inside drawEyes()
+        
+        // Show assistant animations in eyes during music mode
+        if (strcmp(currentSystemState, "LISTENING") == 0 || 
+            strcmp(currentSystemState, "THINKING") == 0 || 
+            strcmp(currentSystemState, "SPEAKING") == 0) {
+            updateEyes(currentSystemState);
+        } else {
+            updateEyes("IDLE"); // Music bobs eyes normally
+        }
         drawEyes();
     } else {
         // 2. Minimal Clean Assistant Screen (Mockup matching)

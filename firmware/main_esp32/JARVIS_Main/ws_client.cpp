@@ -147,6 +147,7 @@ void handleWebSocketMessage(WStype_t type, uint8_t * payload, size_t length) {
                             setSystemState("IDLE");
                         }
                     } else {
+                        setTrackInfo("", "", 0, 0);
                         setSystemState("IDLE");
                     }
                 }
