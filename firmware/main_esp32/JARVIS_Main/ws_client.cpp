@@ -118,7 +118,7 @@ void handleWebSocketMessage(WStype_t type, uint8_t * payload, size_t length) {
                 else if (strcmp(msgType, "TTS_AUDIO") == 0) {
                     const char* audioB64 = doc["audio"];
                     if (audioB64) {
-                        static uint8_t pcmBuffer[2048];
+                        static uint8_t pcmBuffer[8192];
                         size_t decodedBytes = decodeBase64(audioB64, pcmBuffer, sizeof(pcmBuffer));
                         if (decodedBytes > 0) {
                             size_t written = 0;
