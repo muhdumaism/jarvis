@@ -29,11 +29,27 @@ void initUI() {
     initEyes();
 }
 
+void invalidateUICaches() {
+    lastTitle[0] = '\0';
+    lastArtist[0] = '\0';
+    lastTrackPosition = -1;
+    lastTrackDuration = -1;
+    lastWifiConnected = !wifiConnected;
+    lastSpeakerConnected = !speakerConnected;
+    lastSystemState[0] = '\0';
+    lastHeaderDraw = 0;
+    lastDrawnState[0] = '\0';
+    
+    // Reset the coordinate caches inside eyes.cpp
+    resetEyesDrawCache();
+}
+
 void setSystemState(const char* newState) {
     if (strcmp(currentSystemState, newState) != 0) {
         strncpy(currentSystemState, newState, sizeof(currentSystemState) - 1);
         currentSystemState[sizeof(currentSystemState) - 1] = '\0';
         clearDisplay(); // clear whole frame on state change
+        invalidateUICaches(); // Force redraw of all graphics elements
         Serial.printf("[UI] State changed to: %s\n", currentSystemState);
     }
 }

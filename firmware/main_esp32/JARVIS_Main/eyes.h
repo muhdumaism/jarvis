@@ -18,5 +18,6 @@ struct Eye {
 void initEyes();
 void updateEyes(const char* state);
 void drawEyes();
+void resetEyesDrawCache();
 
 #endif // EYES_H
