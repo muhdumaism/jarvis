@@ -32,6 +32,7 @@ class PiperTTSProvider(TTSProvider):
         self.model_path = model_path or settings.piper_model_path
         self.config_path = config_path or settings.piper_config_path
         self._sample_rate = output_sample_rate or settings.tts_sample_rate
+        self.piper_bin_path = settings.piper_bin_path
         self._ready = False
         self._piper_available = False
 
@@ -39,19 +40,20 @@ class PiperTTSProvider(TTSProvider):
         """Check if Piper is available and model exists."""
         # Try importing piper
         try:
-            # Check if piper-tts CLI is available
+            # Check if piper CLI is available
             result = await asyncio.create_subprocess_exec(
-                "piper", "--help",
+                self.piper_bin_path, "--help",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
             await result.communicate()
             self._piper_available = True
-            logger.info("tts.piper.cli_available")
+            logger.info("tts.piper.cli_available", bin=self.piper_bin_path)
         except FileNotFoundError:
             logger.warning(
                 "tts.piper.cli_not_found",
-                help="Install with: pip install piper-tts",
+                bin=self.piper_bin_path,
+                help="Configure PIPER_BIN_PATH in .env to point to standalone piper.exe",
             )
 
         # Check model file
@@ -81,7 +83,7 @@ class PiperTTSProvider(TTSProvider):
         try:
             # Use piper CLI to synthesize
             process = await asyncio.create_subprocess_exec(
-                "piper",
+                self.piper_bin_path,
                 "--model", self.model_path,
                 "--output-raw",
                 stdin=asyncio.subprocess.PIPE,
