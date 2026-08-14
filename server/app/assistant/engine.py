@@ -61,6 +61,48 @@ class IntentEngine:
             }
         """
         cleaned_text = text.lower().strip().replace(".", "").replace(",", "").replace("!", "").replace("?", "").replace("jarvis", "").strip()
+        lower_text = text.lower().strip()
+
+        # Handle Memory clear command
+        if "forget everything you know" in lower_text or "clear all memories" in lower_text or "clear your memory" in lower_text:
+            from app.assistant.memory import MemoryManager
+            MemoryManager.clear_memories()
+            return {
+                "intent": "memory_clear",
+                "success": True,
+                "response_text": "I have cleared all my saved notes and memories.",
+                "data": {},
+            }
+
+        # Handle Memory list query
+        if "what do you know about me" in lower_text or "what is in your memory" in lower_text or "show my notes" in lower_text or "list my notes" in lower_text:
+            from app.assistant.memory import MemoryManager
+            memories = MemoryManager.load_memories()
+            if not memories:
+                response_text = "I don't have any saved facts or notes about you yet. Tell me something to remember by saying 'remember that...'"
+            else:
+                response_text = "Here is what I've noted down about you: " + ". ".join(memories)
+            return {
+                "intent": "memory_list",
+                "success": True,
+                "response_text": response_text,
+                "data": {"memories": memories},
+            }
+
+        # Handle Explicit Memory write commands
+        for prefix in ["remember that", "remember", "note down that", "note down", "write down that", "write down"]:
+            if lower_text.startswith(prefix):
+                fact = text[len(prefix):].strip().strip(",.!?")
+                if fact:
+                    from app.assistant.memory import MemoryManager
+                    MemoryManager.add_memory(fact)
+                    return {
+                        "intent": "memory_add",
+                        "success": True,
+                        "response_text": f"Got it, I've noted that: {fact}.",
+                        "data": {"fact": fact},
+                    }
+                break
 
         intent_data = None
 
@@ -87,8 +129,13 @@ class IntentEngine:
             # Build prompt
             prompt = self._build_prompt(text, device_list)
 
+            # Inject memory prompt extension
+            from app.assistant.memory import MemoryManager
+            memory_ext = MemoryManager.get_system_prompt_extension()
+            full_system_prompt = SYSTEM_PROMPT + memory_ext
+
             # Get LLM response
-            raw_response = await self.llm.generate(prompt, SYSTEM_PROMPT)
+            raw_response = await self.llm.generate(prompt, full_system_prompt)
 
             if not raw_response:
                 logger.warning("intent_engine.no_response", text=text)

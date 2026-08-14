@@ -125,13 +125,6 @@ static bool lastBlinking = false;
 static bool lastDrawnEyeStateWasMusic = false;
 static char lastDrawnEyeState[32] = "";
 
-static float currentX = 160.0;
-static float currentY = 110.0;
-static float vx = 0.5;
-static float vy = 0.4;
-static float lastRobotX = -1.0;
-static float lastRobotY = -1.0;
-
 void resetEyesDrawCache() {
     lastLeftEyeX = -1;
     lastLeftEyeY = -1;
@@ -142,12 +135,6 @@ void resetEyesDrawCache() {
     lastBlinking = false;
     lastDrawnEyeStateWasMusic = false;
     lastDrawnEyeState[0] = '\0';
-    currentX = 160.0;
-    currentY = 110.0;
-    vx = 0.5;
-    vy = 0.4;
-    lastRobotX = -1.0;
-    lastRobotY = -1.0;
 }
 
 void drawThickUpperArc(int x0, int y0, int r, int thickness, uint16_t color) {
@@ -174,158 +161,62 @@ void drawThickUpperArc(int x0, int y0, int r, int thickness, uint16_t color) {
     }
 }
 
-static int lastCy = -1;
-static int lastEarBob = 0;
-static bool lastWasMusic = false;
-
-void drawRobotNew(int cx, int cy, const char* state, bool isBlinking) {
-    // Colors matching the pixel art robot
-    uint16_t Red = ILI9341_RED;
-    uint16_t DarkGrey = 0x3186;     // Outer borders
-    uint16_t VisorBlack = 0x10A2;    // Very dark visor background
-    uint16_t HeadphoneBlue = 0x32AA; // Dark slate blue headphones
-    uint16_t BodyWhite = 0xE75C;     // Light blueish grey body
-    uint16_t HandBlue = 0xAD7A;      // Light blue detached hands
-    uint16_t Cyan = ILI9341_CYAN;
-    uint16_t Green = ILI9341_GREEN;
-    
-    // 1. Draw Helmet (Red rounded rect with borders)
-    tft.fillRoundRect(cx - 24, cy - 35, 48, 42, 10, Red);
-    tft.drawRoundRect(cx - 24, cy - 35, 48, 42, 10, DarkGrey);
-    
-    // 2. Draw Visor Screen
-    tft.fillRoundRect(cx - 18, cy - 30, 36, 32, 6, VisorBlack);
-    
-    // 3. Draw Visor Face/Eye animations
-    if (strcmp(state, "ALARM_TRIGGERED") == 0) {
-        // Red flashing warning bars
-        uint16_t alarmColor = ((millis() / 250) % 2 == 0) ? ILI9341_RED : VisorBlack;
-        tft.fillRoundRect(cx - 10, cy - 22, 4, 16, 2, alarmColor);
-        tft.fillRoundRect(cx + 6,  cy - 22, 4, 16, 2, alarmColor);
-    } 
-    else if (isBlinking) {
-        // Flat blinking lines
-        tft.fillRect(cx - 10, cy - 14, 4, 2, Cyan);
-        tft.fillRect(cx + 6,  cy - 14, 4, 2, Cyan);
-    } 
-    else if (strcmp(state, "THINKING") == 0) {
-        // Horizontal scanning eyes
-        int scanOffset = (int)(6.0 * sin(millis() / 150.0));
-        tft.fillRoundRect(cx - 10 + scanOffset, cy - 22, 4, 16, 2, Cyan);
-        tft.fillRoundRect(cx + 6 + scanOffset,  cy - 22, 4, 16, 2, Cyan);
-    } 
-    else if (strcmp(state, "SPEAKING") == 0) {
-        // Bouncing/speaking vertical eye bars
-        int eyeHeight = 10 + (int)(6.0 * abs(sin(millis() / 100.0)));
-        int topOffset = (16 - eyeHeight) / 2;
-        tft.fillRoundRect(cx - 10, cy - 22 + topOffset, 4, eyeHeight, 2, Cyan);
-        tft.fillRoundRect(cx + 6,  cy - 22 + topOffset, 4, eyeHeight, 2, Cyan);
-    } 
-    else if (strcmp(state, "LISTENING") == 0) {
-        // Taller attentive eyes for listening mode
-        tft.fillRoundRect(cx - 10, cy - 24, 4, 20, 2, Cyan);
-        tft.fillRoundRect(cx + 6,  cy - 24, 4, 20, 2, Cyan);
-    } 
-    else {
-        // Idle / Music mode standard vertical pill eyes
-        tft.fillRoundRect(cx - 10, cy - 22, 4, 16, 2, Cyan);
-        tft.fillRoundRect(cx + 6,  cy - 22, 4, 16, 2, Cyan);
-    }
-    
-    // 4. Draw Headphone Ear Cups
-    tft.fillRoundRect(cx - 29, cy - 24, 5, 20, 3, HeadphoneBlue);
-    tft.fillRoundRect(cx + 24, cy - 24, 5, 20, 3, HeadphoneBlue);
-    
-    // 5. Draw Neck
-    tft.fillRect(cx - 4, cy + 7, 8, 4, Red);
-    
-    // 6. Draw White Body (with red stripe and green light)
-    tft.fillRoundRect(cx - 16, cy + 11, 32, 24, 6, BodyWhite);
-    tft.fillRect(cx - 16, cy + 23, 32, 4, Red);
-    tft.fillRect(cx - 2, cy + 14, 4, 7, Green);
-    
-    // 7. Draw Detached Floating Hands (Spheres)
-    tft.fillCircle(cx - 28, cy + 22, 6, HandBlue);
-    tft.fillCircle(cx + 28, cy + 22, 6, HandBlue);
-}
-
 void drawEyes() {
     bool isMusicMode = (currentTitle[0] != '\0' && 
                         strcmp(currentSystemState, "BACKEND_DISCONNECTED") != 0 &&
                         strcmp(currentSystemState, "SPEAKER_DISCONNECTED") != 0);
 
-    float targetX = 160.0;
-    float targetY = 110.0;
-    bool shouldFloat = false;
-
-    // Check system state to choose animation mode
+    // Bouncing offset for music mode
+    int bobOffset = 0;
     if (isMusicMode) {
-        // Music mode: quick center at Y=145 with a small rhythmic dance bob
-        targetX = 160.0;
-        targetY = 145.0 + (int)(4.0 * sin(millis() / 150.0));
-    } 
-    else if (strcmp(currentEyeState, "IDLE") == 0) {
-        // Idle state: float around the screen!
-        shouldFloat = true;
-    } 
-    else {
-        // Active states (LISTENING, THINKING, SPEAKING, ALARM): Center at Y=110
-        targetX = 160.0;
-        targetY = 110.0;
+        bobOffset = (int)(4.0 * sin(millis() / 150.0));
     }
 
-    // Update positions
-    if (shouldFloat) {
-        currentX += vx;
-        currentY += vy;
+    // Determine target/current coordinate positions based on mode and bobbing
+    int leftEyeX = leftEye.currentX;
+    int rightEyeX = rightEye.currentX;
+    int leftEyeY = isMusicMode ? (145 + bobOffset) : leftEye.currentY;
+    int rightEyeY = isMusicMode ? (145 + bobOffset) : rightEye.currentY;
 
-        // Bounce check on boundaries (keeps robot safely visible below header and above waveform)
-        if (currentX < 40) {
-            currentX = 40;
-            vx = -vx;
-            float speed = 0.3 + (random(60) / 100.0);
-            vx = (vx > 0) ? speed : -speed;
+    // Check state and blinking transitions
+    bool stateChanged = (strcmp(currentEyeState, lastDrawnEyeState) != 0 || isMusicMode != lastDrawnEyeStateWasMusic);
+    bool blinkChanged = (isBlinking != lastBlinking);
+    
+    // Check if coordinates moved (L-R LERP or Music bobbing)
+    bool eyesMoved = (leftEyeX != lastLeftEyeX || leftEyeY != lastLeftEyeY || 
+                      rightEyeX != lastRightEyeX || rightEyeY != lastRightEyeY ||
+                      stateChanged || blinkChanged);
+
+    if (eyesMoved) {
+        // Localized clear to reduce screen flickering completely
+        if (lastDrawnEyeStateWasMusic) {
+            // Clear music eyes bounding box
+            tft.fillRect(110, 120, 100, 45, ILI9341_BLACK);
+        } else {
+            // Clear assistant eyes bounding box
+            tft.fillRect(110, 85, 100, 45, ILI9341_BLACK);
         }
-        if (currentX > 280) {
-            currentX = 280;
-            vx = -vx;
-            float speed = 0.3 + (random(60) / 100.0);
-            vx = (vx > 0) ? speed : -speed;
+
+        int r = 15;
+        int thick = 3;
+        if (isBlinking) {
+            // Draw closed line eyes
+            tft.drawFastHLine(leftEyeX - r, leftEyeY, r * 2, ILI9341_CYAN);
+            tft.drawFastHLine(rightEyeX - r, rightEyeY, r * 2, ILI9341_CYAN);
+        } else {
+            // Draw open line eyes (arcs)
+            drawThickUpperArc(leftEyeX, leftEyeY, r, thick, ILI9341_CYAN);
+            drawThickUpperArc(rightEyeX, rightEyeY, r, thick, ILI9341_CYAN);
         }
-        if (currentY < 65) {
-            currentY = 65;
-            vy = -vy;
-            float speed = 0.3 + (random(60) / 100.0);
-            vy = (vy > 0) ? speed : -speed;
-        }
-        if (currentY > 145) {
-            currentY = 145;
-            vy = -vy;
-            float speed = 0.3 + (random(60) / 100.0);
-            vy = (vy > 0) ? speed : -speed;
-        }
-    } else {
-        // Fast glide transition to target center coordinates
-        currentX += (targetX - currentX) * 0.35;
-        currentY += (targetY - currentY) * 0.35;
-        
-        if (abs(currentX - targetX) < 0.5) currentX = targetX;
-        if (abs(currentY - targetY) < 0.5) currentY = targetY;
+
+        // Update coordinate cache
+        lastLeftEyeX = leftEyeX;
+        lastLeftEyeY = leftEyeY;
+        lastRightEyeX = rightEyeX;
+        lastRightEyeY = rightEyeY;
+        lastBlinking = isBlinking;
+        lastDrawnEyeStateWasMusic = isMusicMode;
+        strncpy(lastDrawnEyeState, currentEyeState, sizeof(lastDrawnEyeState) - 1);
+        lastDrawnEyeState[sizeof(lastDrawnEyeState) - 1] = '\0';
     }
-
-    // Flicker-free clearing of old frame position
-    if (lastRobotX != -1.0) {
-        tft.fillRect((int)lastRobotX - 37, (int)lastRobotY - 37, 74, 74, ILI9341_BLACK);
-    }
-
-    // Draw the new design robot in the updated coordinates
-    drawRobotNew((int)currentX, (int)currentY, currentEyeState, isBlinking);
-
-    // Save cache state for the next frame
-    lastRobotX = currentX;
-    lastRobotY = currentY;
-    lastBlinking = isBlinking;
-    lastDrawnEyeStateWasMusic = isMusicMode;
-    strncpy(lastDrawnEyeState, currentEyeState, sizeof(lastDrawnEyeState) - 1);
-    lastDrawnEyeState[sizeof(lastDrawnEyeState) - 1] = '\0';
 }
