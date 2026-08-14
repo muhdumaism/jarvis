@@ -339,22 +339,14 @@ void drawEyes() {
         if (lastWasMusic) {
             for (int i = 0; i < 6; i++) {
                 if (particles[i].active) {
-                    tft.fillRect((int)particles[i].x, (int)particles[i].y, 2, 2, ILI9341_BLACK);
+                    tft.fillRect((int)particles[i].x - 1, (int)particles[i].y - 1, 4, 4, ILI9341_BLACK);
                 }
             }
         }
 
-        // Clean previous frame's body drawing locally (no flickering)
+        // Clean previous frame's body drawing using bounding box to prevent smearing
         if (lastCy != -1 && lastWasMusic && (lastCy != cy || lastEarBob != earBob)) {
-            tft.fillTriangle(centerX - 27, lastCy - 35 + lastEarBob, centerX - 37, lastCy - 12 + lastEarBob, centerX - 17, lastCy - 10 + lastEarBob, ILI9341_BLACK);
-            tft.fillTriangle(centerX + 27, lastCy - 35 + lastEarBob, centerX + 17, lastCy - 10 + lastEarBob, centerX + 37, lastCy - 12 + lastEarBob, ILI9341_BLACK);
-            tft.fillCircle(centerX, lastCy, 34, ILI9341_BLACK);
-            tft.fillCircle(centerX - 31, lastCy, 6, ILI9341_BLACK);
-            tft.fillCircle(centerX + 31, lastCy, 6, ILI9341_BLACK);
-            
-            // Clean headphone cups
-            tft.fillRoundRect(centerX - 38, lastCy - 8, 6, 16, 3, ILI9341_BLACK);
-            tft.fillRoundRect(centerX + 32, lastCy - 8, 6, 16, 3, ILI9341_BLACK);
+            tft.fillRect(115, lastCy - 45, 90, 85, ILI9341_BLACK);
         }
 
         // Redraw body and head at new bob height
