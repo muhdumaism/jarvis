@@ -40,9 +40,13 @@ class PiperTTSProvider(TTSProvider):
         """Check if Piper is available and model exists."""
         # Try importing piper
         try:
+            bin_path = self.piper_bin_path
+            if bin_path != "piper":
+                bin_path = os.path.abspath(bin_path)
+
             # Check if piper CLI is available
             result = await asyncio.create_subprocess_exec(
-                self.piper_bin_path, "--help",
+                bin_path, "--help",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -81,9 +85,13 @@ class PiperTTSProvider(TTSProvider):
             raise RuntimeError("Piper TTS not ready — model not found")
 
         try:
+            bin_path = self.piper_bin_path
+            if bin_path != "piper":
+                bin_path = os.path.abspath(bin_path)
+
             # Use piper CLI to synthesize
             process = await asyncio.create_subprocess_exec(
-                self.piper_bin_path,
+                bin_path,
                 "--model", self.model_path,
                 "--output-raw",
                 stdin=asyncio.subprocess.PIPE,
