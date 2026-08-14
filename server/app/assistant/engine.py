@@ -61,10 +61,9 @@ class IntentEngine:
             }
         """
         cleaned_text = text.lower().strip().replace(".", "").replace(",", "").replace("!", "").replace("?", "").replace("jarvis", "").strip()
-        lower_text = text.lower().strip()
 
         # Handle Memory clear command
-        if "forget everything you know" in lower_text or "clear all memories" in lower_text or "clear your memory" in lower_text:
+        if "forget everything" in cleaned_text or "clear all memories" in cleaned_text or "clear your memory" in cleaned_text:
             from app.assistant.memory import MemoryManager
             MemoryManager.clear_memories()
             return {
@@ -75,7 +74,7 @@ class IntentEngine:
             }
 
         # Handle Memory list query
-        if "what do you know about me" in lower_text or "what is in your memory" in lower_text or "show my notes" in lower_text or "list my notes" in lower_text:
+        if "what do you know about me" in cleaned_text or "what is in your memory" in cleaned_text or "show my notes" in cleaned_text or "list my notes" in cleaned_text:
             from app.assistant.memory import MemoryManager
             memories = MemoryManager.load_memories()
             if not memories:
@@ -90,9 +89,9 @@ class IntentEngine:
             }
 
         # Handle Explicit Memory write commands
-        for prefix in ["remember that", "remember", "note down that", "note down", "write down that", "write down"]:
-            if lower_text.startswith(prefix):
-                fact = text[len(prefix):].strip().strip(",.!?")
+        for prefix in ["remember that ", "remember ", "note down that ", "note down ", "write down that ", "write down "]:
+            if cleaned_text.startswith(prefix):
+                fact = cleaned_text[len(prefix):].strip()
                 if fact:
                     from app.assistant.memory import MemoryManager
                     MemoryManager.add_memory(fact)
