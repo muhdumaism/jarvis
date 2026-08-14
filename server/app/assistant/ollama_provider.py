@@ -25,7 +25,7 @@ class OllamaProvider:
         self,
         base_url: str = None,
         model: str = None,
-        timeout: float = 30.0,
+        timeout: float = 90.0,
     ):
         self.base_url = base_url or settings.ollama_base_url
         self.model = model or settings.ollama_model
