@@ -63,6 +63,7 @@ class VoicePipeline:
                 model_size=settings.stt_model,
                 device=settings.stt_device,
                 language=settings.stt_language,
+                initial_prompt=settings.whisper_initial_prompt,
             )
             await self.stt.initialize()
             logger.info("voice.stt.ready")

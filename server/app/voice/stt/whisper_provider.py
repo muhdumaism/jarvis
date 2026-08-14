@@ -30,11 +30,13 @@ class WhisperSTTProvider(STTProvider):
         device: str = "cpu",
         language: str = "en",
         compute_type: str = "int8",
+        initial_prompt: str = None,
     ):
         self.model_size = model_size
         self.device = device
         self.language = language
         self.compute_type = compute_type
+        self.initial_prompt = initial_prompt
         self._model = None
         self._ready = False
 
@@ -98,6 +100,7 @@ class WhisperSTTProvider(STTProvider):
                     beam_size=1,  # Faster for CPU
                     best_of=1,
                     temperature=0.0,
+                    initial_prompt=self.initial_prompt,
                     vad_filter=True,  # Built-in VAD filtering
                     vad_parameters=dict(
                         min_silence_duration_ms=500,
