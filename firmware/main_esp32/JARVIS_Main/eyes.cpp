@@ -161,7 +161,40 @@ void drawThickUpperArc(int x0, int y0, int r, int thickness, uint16_t color) {
     }
 }
 
-void drawRobotFull(int centerX, int centerY, const char* state) {
+struct Particle {
+    float x;
+    float y;
+    float vx;
+    float vy;
+    uint16_t color;
+    bool active;
+};
+
+static Particle particles[6];
+static bool particlesInitialized = false;
+static int lastCy = -1;
+static int lastEarBob = 0;
+static bool lastWasMusic = false;
+
+void initParticles(int centerX, int cy, int earBob) {
+    uint16_t colors[3] = {ILI9341_CYAN, 0xF81F, 0xFFE0}; // Cyan, Magenta, Yellow
+    for (int i = 0; i < 6; i++) {
+        particles[i].active = true;
+        if (i < 3) {
+            particles[i].x = centerX - 27;
+            particles[i].vx = -0.3 - (random(60) / 100.0);
+        } else {
+            particles[i].x = centerX + 27;
+            particles[i].vx = 0.3 + (random(60) / 100.0);
+        }
+        particles[i].y = cy - 35 + earBob;
+        particles[i].vy = -0.8 - (random(80) / 100.0);
+        particles[i].color = colors[random(3)];
+    }
+    particlesInitialized = true;
+}
+
+void drawRobotFull(int centerX, int cy, const char* state) {
     // Colors
     uint16_t DarkBrown = 0x4901;
     uint16_t GoldMain = 0xFEC8;
@@ -170,14 +203,15 @@ void drawRobotFull(int centerX, int centerY, const char* state) {
     uint16_t MintGreen = 0x3F2A;
     uint16_t VisorBlack = 0x18C3;
 
-    int cy = centerY;
     int earBob = 0;
     
-    // Static perked/drooped ears on state transition
+    // Set static perked/drooped ears on state transition in assistant mode
     if (strcmp(state, "LISTENING") == 0) {
         earBob = -3;
     } else if (strcmp(state, "ALARM_TRIGGERED") == 0) {
         earBob = 2;
+    } else if (strcmp(state, "MUSIC") == 0) {
+        earBob = (int)(3.0 * sin(millis() / 130.0 + 1.0));
     }
 
     // 1. Draw Left Ear
@@ -213,14 +247,12 @@ void drawRobotFull(int centerX, int centerY, const char* state) {
     tft.fillRoundRect(centerX - 22, cy - 8, 44, 18, 5, DarkBrown);
 }
 
-void drawRobotFace(int centerX, int centerY, const char* state, bool isBlinking) {
+void drawRobotFace(int centerX, int cy, const char* state, bool isBlinking) {
     uint16_t VisorBlack = 0x18C3;
     uint16_t Cyan = ILI9341_CYAN;
     uint16_t Red = ILI9341_RED;
-    
-    int cy = centerY;
 
-    // Clear only the internal visor screen
+    // Clear only internal visor screen
     uint16_t visorBg = (strcmp(state, "ALARM_TRIGGERED") == 0) ? tft.color565(120, 0, 0) : VisorBlack;
     tft.fillRoundRect(centerX - 20, cy - 7, 40, 16, 4, visorBg);
 
@@ -261,6 +293,7 @@ void drawRobotFace(int centerX, int centerY, const char* state, bool isBlinking)
         tft.drawFastVLine(centerX + 11, cy + 1, 10, Cyan);
     } 
     else {
+        // Idle / Speaking / Music mode
         if (isBlinking) {
             tft.drawFastHLine(centerX - 13, cy - 3, 6, Cyan);
             tft.drawFastHLine(centerX + 7, cy - 3, 6, Cyan);
@@ -288,52 +321,107 @@ void drawEyes() {
                         strcmp(currentSystemState, "BACKEND_DISCONNECTED") != 0 &&
                         strcmp(currentSystemState, "SPEAKER_DISCONNECTED") != 0);
 
-    // Bouncing offset for music mode
-    int bobOffset = 0;
-    if (isMusicMode) {
-        bobOffset = (int)(4.0 * sin(millis() / 150.0));
-    }
+    int centerX = 160;
 
-    // Determine Y coordinate based on mode and bobbing
-    int leftEyeY = isMusicMode ? (145 + bobOffset) : 110;
-    int rightEyeY = isMusicMode ? (145 + bobOffset) : 110;
-
-    // Check state and blinking transitions
+    // Check state transitions
     bool stateChanged = (strcmp(currentEyeState, lastDrawnEyeState) != 0 || isMusicMode != lastDrawnEyeStateWasMusic);
     bool blinkChanged = (isBlinking != lastBlinking);
-    
-    // Update face only if state changed, blink status changed, or active animations are running
-    bool needsFaceUpdate = (stateChanged || blinkChanged || 
-                            strcmp(currentEyeState, "THINKING") == 0 || 
-                            strcmp(currentEyeState, "SPEAKING") == 0);
 
     if (isMusicMode) {
-        if (stateChanged || blinkChanged || lastLeftEyeY != leftEyeY) {
-            // Clear music eyes bounding box
-            tft.fillRect(110, 120, 100, 45, ILI9341_BLACK);
+        // Music Mode: Dancing robot with headphones and floating particles!
+        int bobOffset = (int)(5.0 * sin(millis() / 130.0));
+        int earBob = (int)(3.0 * sin(millis() / 130.0 + 1.0));
+        int cy = 145 + bobOffset;
 
-            int r = 15;
-            int thick = 3;
-            if (isBlinking) {
-                tft.drawFastHLine(135 - r, leftEyeY, r * 2, ILI9341_CYAN);
-                tft.drawFastHLine(185 - r, rightEyeY, r * 2, ILI9341_CYAN);
-            } else {
-                drawThickUpperArc(135, leftEyeY, r, thick, ILI9341_CYAN);
-                drawThickUpperArc(185, rightEyeY, r, thick, ILI9341_CYAN);
+        // Clean previous frame's drift particles
+        if (lastWasMusic) {
+            for (int i = 0; i < 6; i++) {
+                if (particles[i].active) {
+                    tft.fillRect((int)particles[i].x, (int)particles[i].y, 2, 2, ILI9341_BLACK);
+                }
             }
         }
+
+        // Clean previous frame's body drawing locally (no flickering)
+        if (lastCy != -1 && lastWasMusic && (lastCy != cy || lastEarBob != earBob)) {
+            tft.fillTriangle(centerX - 27, lastCy - 35 + lastEarBob, centerX - 37, lastCy - 12 + lastEarBob, centerX - 17, lastCy - 10 + lastEarBob, ILI9341_BLACK);
+            tft.fillTriangle(centerX + 27, lastCy - 35 + lastEarBob, centerX + 17, lastCy - 10 + lastEarBob, centerX + 37, lastCy - 12 + lastEarBob, ILI9341_BLACK);
+            tft.fillCircle(centerX, lastCy, 34, ILI9341_BLACK);
+            tft.fillCircle(centerX - 31, lastCy, 6, ILI9341_BLACK);
+            tft.fillCircle(centerX + 31, lastCy, 6, ILI9341_BLACK);
+            
+            // Clean headphone cups
+            tft.fillRoundRect(centerX - 38, lastCy - 8, 6, 16, 3, ILI9341_BLACK);
+            tft.fillRoundRect(centerX + 32, lastCy - 8, 6, 16, 3, ILI9341_BLACK);
+        }
+
+        // Redraw body and head at new bob height
+        drawRobotFull(centerX, cy, "MUSIC");
+        
+        // Draw Headphones over the head
+        tft.drawCircleHelper(centerX, cy, 33, 1, ILI9341_DARKGREY);
+        tft.drawCircleHelper(centerX, cy, 33, 2, ILI9341_DARKGREY);
+        tft.fillRoundRect(centerX - 38, cy - 8, 6, 16, 3, 0xF81F); // Magenta cup
+        tft.fillRoundRect(centerX + 32, cy - 8, 6, 16, 3, 0xF81F);
+
+        // Draw face
+        drawRobotFace(centerX, cy, "MUSIC", isBlinking);
+
+        // Update and draw floating music particles from ears
+        if (!particlesInitialized) {
+            initParticles(centerX, cy, earBob);
+        }
+        for (int i = 0; i < 6; i++) {
+            particles[i].x += particles[i].vx;
+            particles[i].y += particles[i].vy;
+            
+            // Reset if floated out of boundaries
+            if (particles[i].y < cy - 65 || particles[i].x < centerX - 60 || particles[i].x > centerX + 60) {
+                if (i < 3) {
+                    particles[i].x = centerX - 27;
+                    particles[i].vx = -0.3 - (random(60) / 100.0);
+                } else {
+                    particles[i].x = centerX + 27;
+                    particles[i].vx = 0.3 + (random(60) / 100.0);
+                }
+                particles[i].y = cy - 35 + earBob;
+                particles[i].vy = -0.8 - (random(80) / 100.0);
+            }
+            
+            // Draw particle
+            tft.fillRect((int)particles[i].x, (int)particles[i].y, 2, 2, particles[i].color);
+        }
+
+        lastCy = cy;
+        lastEarBob = earBob;
+        lastWasMusic = true;
     } else {
-        // Assistant Mode
-        if (stateChanged) {
+        // Assistant Mode: Static robot to keep display flicker-free
+        int cy = 110;
+        int earBob = (strcmp(currentEyeState, "LISTENING") == 0) ? -3 : (strcmp(currentEyeState, "ALARM_TRIGGERED") == 0) ? 2 : 0;
+        
+        // Clean music leftovers once if we transitioned from music
+        if (stateChanged && lastWasMusic && lastCy != -1) {
+            tft.fillRect(100, 40, 120, 140, ILI9341_BLACK); // Clear entire robot column once
+            lastCy = -1;
+        }
+
+        if (stateChanged || lastCy == -1) {
             // Full redraw: clear the whole robot area once on transition
             tft.fillRect(115, 60, 90, 98, ILI9341_BLACK);
-            drawRobotFull(160, 110, currentEyeState);
+            drawRobotFull(centerX, cy, currentEyeState);
         }
         
-        if (needsFaceUpdate) {
-            // Partial redraw: clear only the visor screen and draw the eyes/mouth
-            drawRobotFace(160, 110, currentEyeState, isBlinking);
+        bool needsFaceUpdate = (stateChanged || blinkChanged || 
+                                strcmp(currentEyeState, "THINKING") == 0 || 
+                                strcmp(currentEyeState, "SPEAKING") == 0);
+        if (needsFaceUpdate || lastCy == -1) {
+            drawRobotFace(centerX, cy, currentEyeState, isBlinking);
         }
+
+        lastCy = cy;
+        lastEarBob = earBob;
+        lastWasMusic = false;
     }
 
     lastLeftEyeY = leftEyeY;
