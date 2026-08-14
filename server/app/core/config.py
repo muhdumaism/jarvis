@@ -5,9 +5,13 @@ All settings loaded from environment variables / .env file.
 Single source of truth for server configuration.
 """
 
+import os
 from pydantic_settings import BaseSettings
 from pydantic import Field
 from typing import List
+
+_config_dir = os.path.dirname(os.path.abspath(__file__))
+_env_path = os.path.abspath(os.path.join(_config_dir, "..", "..", ".env"))
 
 
 class Settings(BaseSettings):
@@ -82,10 +86,6 @@ class Settings(BaseSettings):
 
     # --- Firmware ---
     firmware_dir: str = "./firmware-build"
-
-    import os
-    _config_dir = os.path.dirname(os.path.abspath(__file__))
-    _env_path = os.path.abspath(os.path.join(_config_dir, "..", "..", ".env"))
 
     model_config = {
         "env_file": _env_path,
