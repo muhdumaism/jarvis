@@ -25,7 +25,7 @@
 
 // 1. SPI TFT Display (ILI9341 or ST7789)
 #define TFT_CS              15  // Chip Select
-#define TFT_DC              2   // Data/Command
+#define TFT_DC              17  // Data/Command
 #define TFT_RST             4   // Reset
 #define TFT_MOSI            13  // SPI MOSI
 #define TFT_MISO            12  // SPI MISO (safe boot pin check)
