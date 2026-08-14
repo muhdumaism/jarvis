@@ -161,38 +161,9 @@ void drawThickUpperArc(int x0, int y0, int r, int thickness, uint16_t color) {
     }
 }
 
-struct Particle {
-    float x;
-    float y;
-    float vx;
-    float vy;
-    uint16_t color;
-    bool active;
-};
-
-static Particle particles[6];
-static bool particlesInitialized = false;
 static int lastCy = -1;
 static int lastEarBob = 0;
 static bool lastWasMusic = false;
-
-void initParticles(int centerX, int cy, int earBob) {
-    uint16_t colors[3] = {ILI9341_CYAN, 0xF81F, 0xFFE0}; // Cyan, Magenta, Yellow
-    for (int i = 0; i < 6; i++) {
-        particles[i].active = true;
-        if (i < 3) {
-            particles[i].x = centerX - 27;
-            particles[i].vx = -0.3 - (random(60) / 100.0);
-        } else {
-            particles[i].x = centerX + 27;
-            particles[i].vx = 0.3 + (random(60) / 100.0);
-        }
-        particles[i].y = cy - 35 + earBob;
-        particles[i].vy = -0.8 - (random(80) / 100.0);
-        particles[i].color = colors[random(3)];
-    }
-    particlesInitialized = true;
-}
 
 void drawRobotFull(int centerX, int cy, const char* state) {
     // Colors
@@ -330,19 +301,10 @@ void drawEyes() {
     bool blinkChanged = (isBlinking != lastBlinking);
 
     if (isMusicMode) {
-        // Music Mode: Dancing robot with headphones and floating particles!
+        // Music Mode: Dancing robot with headphones!
         int bobOffset = (int)(5.0 * sin(millis() / 130.0));
         int earBob = (int)(3.0 * sin(millis() / 130.0 + 1.0));
         int cy = 145 + bobOffset;
-
-        // Clean previous frame's drift particles
-        if (lastWasMusic) {
-            for (int i = 0; i < 6; i++) {
-                if (particles[i].active) {
-                    tft.fillRect((int)particles[i].x - 1, (int)particles[i].y - 1, 4, 4, ILI9341_BLACK);
-                }
-            }
-        }
 
         // Clean previous frame's body drawing using bounding box to prevent smearing
         if (lastCy != -1 && lastWasMusic && (lastCy != cy || lastEarBob != earBob)) {
@@ -360,31 +322,6 @@ void drawEyes() {
 
         // Draw face
         drawRobotFace(centerX, cy, "MUSIC", isBlinking);
-
-        // Update and draw floating music particles from ears
-        if (!particlesInitialized) {
-            initParticles(centerX, cy, earBob);
-        }
-        for (int i = 0; i < 6; i++) {
-            particles[i].x += particles[i].vx;
-            particles[i].y += particles[i].vy;
-            
-            // Reset if floated out of boundaries
-            if (particles[i].y < cy - 65 || particles[i].x < centerX - 60 || particles[i].x > centerX + 60) {
-                if (i < 3) {
-                    particles[i].x = centerX - 27;
-                    particles[i].vx = -0.3 - (random(60) / 100.0);
-                } else {
-                    particles[i].x = centerX + 27;
-                    particles[i].vx = 0.3 + (random(60) / 100.0);
-                }
-                particles[i].y = cy - 35 + earBob;
-                particles[i].vy = -0.8 - (random(80) / 100.0);
-            }
-            
-            // Draw particle
-            tft.fillRect((int)particles[i].x, (int)particles[i].y, 2, 2, particles[i].color);
-        }
 
         lastCy = cy;
         lastEarBob = earBob;
