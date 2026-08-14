@@ -116,11 +116,6 @@ class AlarmManager:
         """Stop any currently ringing alarm and cancel any active beepers."""
         if self.is_alarm_ringing:
             self.is_alarm_ringing = False
-            # Stop Windows sound loops
-            try:
-                winsound.PlaySound(None, 0)
-            except Exception:
-                pass
             logger.info("alarm.ringing_stopped")
             await self.event_bus.publish(JarvisEvent(
                 type="ALARM_STOPPED",
@@ -168,12 +163,6 @@ class AlarmManager:
     def _play_alarm_loop(self):
         """Synchronous loop to play alternating frequency warning tones on the Windows speaker."""
         try:
-            # Play a background system sound loop as backup
-            try:
-                winsound.PlaySound("SystemHand", winsound.SND_ALIAS | winsound.SND_ASYNC | winsound.SND_LOOP)
-            except Exception:
-                pass
-
             # Alternating high-reliability tone beeps
             while self.is_alarm_ringing:
                 winsound.Beep(1800, 350)
@@ -191,7 +180,5 @@ class AlarmManager:
                     if not self.is_alarm_ringing:
                         break
                     time.sleep(0.05)
-
-            winsound.PlaySound(None, 0)
         except Exception as e:
             logger.error("alarm.playback_error", error=str(e))
