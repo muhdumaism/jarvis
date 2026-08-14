@@ -58,30 +58,46 @@ class IntentEngine:
                 "data": dict,
             }
         """
-        # Build the device context for the LLM
-        devices = await self.device_manager.get_all()
-        device_list = ", ".join(
-            f'{d["id"]} ({d["name"]}, {d["state"]})'
-            for d in devices
-        ) or "No devices configured"
+        cleaned_text = text.lower().strip().replace(".", "").replace(",", "").replace("!", "").replace("?", "").replace("jarvis", "").strip()
 
-        # Build prompt
-        prompt = self._build_prompt(text, device_list)
+        intent_data = None
 
-        # Get LLM response
-        raw_response = await self.llm.generate(prompt, SYSTEM_PROMPT)
+        # Rule-based intent overrides for instant and 100% reliable music control
+        if cleaned_text in ["stop", "stop music", "stop the music", "pause", "pause music", "pause the music", "stop playback"]:
+            intent_data = {"intent": "spotify_stop"}
+        elif cleaned_text in ["resume", "resume music", "play music", "play", "resume playback"]:
+            intent_data = {"intent": "spotify_resume"}
+        elif cleaned_text in ["next", "next song", "next track", "skip", "skip song", "skip track"]:
+            intent_data = {"intent": "spotify_skip"}
+        elif cleaned_text in ["previous", "previous song", "previous track", "go back", "play previous"]:
+            intent_data = {"intent": "spotify_previous"}
 
-        if not raw_response:
-            logger.warning("intent_engine.no_response", text=text)
-            return {
-                "intent": "unknown",
-                "success": False,
-                "response_text": "Sorry, I couldn't process that right now.",
-                "data": {},
-            }
+        if intent_data is None:
+            # Build the device context for the LLM
+            devices = await self.device_manager.get_all()
+            device_list = ", ".join(
+                f'{d["id"]} ({d["name"]}, {d["state"]})'
+                for d in devices
+            ) or "No devices configured"
 
-        # Parse intent from LLM response
-        intent_data = self._parse_intent(raw_response)
+            # Build prompt
+            prompt = self._build_prompt(text, device_list)
+
+            # Get LLM response
+            raw_response = await self.llm.generate(prompt, SYSTEM_PROMPT)
+
+            if not raw_response:
+                logger.warning("intent_engine.no_response", text=text)
+                return {
+                    "intent": "unknown",
+                    "success": False,
+                    "response_text": "Sorry, I couldn't process that right now.",
+                    "data": {},
+                }
+
+            # Parse intent from LLM response
+            intent_data = self._parse_intent(raw_response)
+
         intent_type = intent_data.get("intent", "unknown")
 
         logger.info(
