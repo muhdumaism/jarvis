@@ -125,6 +125,15 @@ class VoicePipeline:
 
             logger.info("voice.session.started", message_id=msg_id)
 
+            # Ducking: Pause Spotify if active
+            self._paused_for_voice = False
+            if self.music_manager and self.music_manager.is_connected:
+                state = await self.music_manager.get_state()
+                if state and state.get("is_playing"):
+                    logger.info("voice.music_duck.pause", message_id=msg_id)
+                    await self.music_manager.execute_command("pause")
+                    self._paused_for_voice = True
+
             await self.event_bus.publish(JarvisEvent(
                 type="VOICE_LISTENING",
                 source="voice",
@@ -176,78 +185,91 @@ class VoicePipeline:
 
         msg_id = session.message_id
 
-        if not session.audio_chunks:
-            logger.warning("voice.session.empty", message_id=msg_id)
-            return
-
-        # Combine audio chunks
-        audio_data = b"".join(session.audio_chunks)
-        logger.info("voice.processing", message_id=msg_id, audio_bytes=len(audio_data))
-
-        # Publish thinking state
-        await self.event_bus.publish(JarvisEvent(
-            type="VOICE_THINKING",
-            source="voice",
-            message_id=msg_id,
-        ))
-
-        # --- STT ---
-        if not self.stt or not self.stt.is_ready:
-            await self._publish_error(msg_id, "STT_UNAVAILABLE", "Speech recognition is not available")
-            return
-
         try:
-            transcription = await self.stt.transcribe(audio_data)
-        except Exception as e:
-            logger.error("voice.stt_error", error=str(e), message_id=msg_id)
-            await self._publish_error(msg_id, "STT_ERROR", f"Transcription failed: {e}")
-            return
+            if not session.audio_chunks:
+                logger.warning("voice.session.empty", message_id=msg_id)
+                return
 
-        if not transcription or not transcription.strip():
-            logger.info("voice.empty_transcription", message_id=msg_id)
-            return
+            # Combine audio chunks
+            audio_data = b"".join(session.audio_chunks)
+            logger.info("voice.processing", message_id=msg_id, audio_bytes=len(audio_data))
 
-        logger.info("voice.transcribed", text=transcription, message_id=msg_id)
+            # Publish thinking state
+            await self.event_bus.publish(JarvisEvent(
+                type="VOICE_THINKING",
+                source="voice",
+                message_id=msg_id,
+            ))
 
-        await self.event_bus.publish(JarvisEvent(
-            type="VOICE_TRANSCRIBED",
-            source="voice",
-            message_id=msg_id,
-            data={"text": transcription},
-        ))
+            # --- STT ---
+            if not self.stt or not self.stt.is_ready:
+                await self._publish_error(msg_id, "STT_UNAVAILABLE", "Speech recognition is not available")
+                return
 
-        # --- Intent Processing ---
-        if not self.intent_engine or not self.intent_engine.is_ready:
-            await self._publish_error(msg_id, "AI_UNAVAILABLE", "AI assistant is not available")
-            return
-
-        try:
-            result = await self.intent_engine.process(transcription, msg_id)
-        except Exception as e:
-            logger.error("voice.intent_error", error=str(e), message_id=msg_id)
-            await self._publish_error(msg_id, "AI_ERROR", f"Intent processing failed: {e}")
-            return
-
-        # --- TTS Response ---
-        response_text = result.get("response_text", "")
-        if response_text and self.tts and self.tts.is_ready:
             try:
-                await self.tts.speak(response_text, msg_id)
+                transcription = await self.stt.transcribe(audio_data)
             except Exception as e:
-                logger.error("voice.tts_error", error=str(e), message_id=msg_id)
-                # TTS failure should not prevent command execution
+                logger.error("voice.stt_error", error=str(e), message_id=msg_id)
+                await self._publish_error(msg_id, "STT_ERROR", f"Transcription failed: {e}")
+                return
 
-        # Publish final response
-        await self.event_bus.publish(JarvisEvent(
-            type="ASSISTANT_RESPONSE",
-            source="voice",
-            message_id=msg_id,
-            data={
-                "text": response_text,
-                "success": result.get("success", False),
-                "intent": result.get("intent"),
-            },
-        ))
+            if not transcription or not transcription.strip():
+                logger.info("voice.empty_transcription", message_id=msg_id)
+                return
+
+            logger.info("voice.transcribed", text=transcription, message_id=msg_id)
+
+            await self.event_bus.publish(JarvisEvent(
+                type="VOICE_TRANSCRIBED",
+                source="voice",
+                message_id=msg_id,
+                data={"text": transcription},
+            ))
+
+            # --- Intent Processing ---
+            if not self.intent_engine or not self.intent_engine.is_ready:
+                await self._publish_error(msg_id, "AI_UNAVAILABLE", "AI assistant is not available")
+                return
+
+            try:
+                result = await self.intent_engine.process(transcription, msg_id)
+            except Exception as e:
+                logger.error("voice.intent_error", error=str(e), message_id=msg_id)
+                await self._publish_error(msg_id, "AI_ERROR", f"Intent processing failed: {e}")
+                return
+
+            # If the user issued a music playback intent (e.g. they played a new song or explicitly stopped it),
+            # we do not want to auto-resume the old music!
+            intent_type = result.get("intent", "")
+            if intent_type == "music_control" or intent_type.startswith("spotify_"):
+                self._paused_for_voice = False
+
+            # --- TTS Response ---
+            response_text = result.get("response_text", "")
+            if response_text and self.tts and self.tts.is_ready:
+                try:
+                    await self.tts.speak(response_text, msg_id)
+                except Exception as e:
+                    logger.error("voice.tts_error", error=str(e), message_id=msg_id)
+
+            # Publish final response
+            await self.event_bus.publish(JarvisEvent(
+                type="ASSISTANT_RESPONSE",
+                source="voice",
+                message_id=msg_id,
+                data={
+                    "text": response_text,
+                    "success": result.get("success", False),
+                    "intent": result.get("intent"),
+                },
+            ))
+        finally:
+            # Auto-resume paused music if we ducked it for the voice command
+            if getattr(self, "_paused_for_voice", False):
+                self._paused_for_voice = False
+                if self.music_manager and self.music_manager.is_connected:
+                    logger.info("voice.music_duck.resume", message_id=msg_id)
+                    await self.music_manager.execute_command("resume")
 
     async def _publish_error(self, message_id: str, code: str, message: str) -> None:
         """Publish an error event."""
