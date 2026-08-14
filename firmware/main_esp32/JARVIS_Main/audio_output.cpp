@@ -19,11 +19,11 @@ void initAudioOutput() {
     };
 
     i2s_pin_config_t pin_config = {
+        .mck_io_num = I2S_PIN_NO_CHANGE,
         .bck_io_num = AUDIO_BCLK,
         .ws_io_num = AUDIO_WS,
         .data_out_num = AUDIO_DOUT,
-        .data_in_num = I2S_PIN_NO_CHANGE,
-        .mck_io_num = I2S_PIN_NO_CHANGE
+        .data_in_num = I2S_PIN_NO_CHANGE
     };
 
     // Install driver on I2S1 channel
