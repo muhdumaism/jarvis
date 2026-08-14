@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     stt_model: str = "tiny"
     stt_language: str = "en"
     stt_device: str = "cpu"
-    whisper_initial_prompt: str = "JARVIS, play Thaktho, Malayalam, Manglish, song names, Nilambur, Kerala"
+    whisper_initial_prompt: str = "JARVIS, play Thaktho, Thakthom, Nenjakame, Nenjakam, Malayalam, Manglish, song names, Nilambur, Kerala"
 
     # --- AI / Intent ---
     ai_provider: str = "ollama"
