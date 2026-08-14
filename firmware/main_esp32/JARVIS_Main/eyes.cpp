@@ -1,5 +1,7 @@
 #include "eyes.h"
 
+extern char currentSystemState[];
+
 Eye leftEye;
 Eye rightEye;
 
@@ -157,79 +159,69 @@ void drawThickUpperArc(int x0, int y0, int r, int thickness, uint16_t color) {
 }
 
 void drawEyes() {
-    // 1. Calculate state-based pupil sizes
-    int leftPupilR = leftEye.r / 2;
-    int rightPupilR = rightEye.r / 2;
+    bool isMusicMode = (strcmp(currentSystemState, "SPOTIFY_PLAYING") == 0 || 
+                        strcmp(currentSystemState, "SPOTIFY_PAUSED") == 0);
 
-    if (strcmp(currentEyeState, "SPEAKING") == 0) {
-        // Pulsate pupil size to simulate talking
-        leftPupilR = leftEye.r / 2 + (int)(3.5 * sin(millis() / 120.0));
-        rightPupilR = rightEye.r / 2 + (int)(3.5 * sin(millis() / 120.0));
-    } else if (strcmp(currentEyeState, "LISTENING") == 0) {
-        // Dilate pupils when listening
-        leftPupilR = leftEye.r / 2 + 4;
-        rightPupilR = rightEye.r / 2 + 4;
-    } else if (strcmp(currentEyeState, "THINKING") == 0) {
-        // Contract pupils when thinking
-        leftPupilR = leftEye.r / 2 - 3;
-        rightPupilR = rightEye.r / 2 - 3;
+    // Bouncing offset for music mode
+    int bobOffset = 0;
+    if (isMusicMode) {
+        bobOffset = (int)(4.0 * sin(millis() / 150.0));
     }
 
-    // Check if eyes actually moved, pupil dilated, blink status changed, or state changed
-    bool eyesMoved = (leftEye.currentX != lastLeftEyeX || leftEye.currentY != lastLeftEyeY ||
-                      rightEye.currentX != lastRightEyeX || rightEye.currentY != lastRightEyeY ||
-                      leftPupilR != lastLeftPupilR || rightPupilR != lastRightPupilR ||
+    // Determine Y coordinate based on mode and bobbing
+    int leftEyeY = isMusicMode ? (145 + bobOffset) : 120;
+    int rightEyeY = isMusicMode ? (145 + bobOffset) : 120;
+
+    // Adjust vertical offset slightly in assistant mode based on status
+    if (!isMusicMode) {
+        if (strcmp(currentEyeState, "SPEAKING") == 0) {
+            leftEyeY += (int)(2.0 * sin(millis() / 120.0));
+            rightEyeY += (int)(2.0 * sin(millis() / 120.0));
+        } else if (strcmp(currentEyeState, "LISTENING") == 0) {
+            leftEyeY -= 4; // Widen slightly
+            rightEyeY -= 4;
+        }
+    }
+
+    // Force eyesMoved to be true in music mode to keep the bobbing animation going
+    bool eyesMoved = (leftEyeY != lastLeftEyeY || rightEyeY != lastRightEyeY ||
                       isBlinking != lastBlinking ||
+                      isMusicMode || 
                       strcmp(currentEyeState, lastDrawnEyeState) != 0);
 
     if (eyesMoved) {
-        // Clear only the bounding box of the center circular assistant area (X: 108 to 212, Y: 55 to 165)
-        tft.fillRect(108, 55, 104, 110, ILI9341_BLACK);
+        if (isMusicMode) {
+            // Clear music eyes bounding box (X: 110 to 210, Y: 120 to 165)
+            tft.fillRect(110, 120, 100, 45, ILI9341_BLACK);
 
-        // Draw center circular hologram rings
-        tft.drawCircle(160, 110, 48, ILI9341_BLUE);
-        tft.drawCircle(160, 110, 51, ILI9341_DARKGREY);
-
-        if (isBlinking) {
-            // Draw blink state as horizontal lines
-            tft.drawFastHLine(leftEye.x - leftEye.r, leftEye.y, leftEye.r * 2, ILI9341_CYAN);
-            tft.drawFastHLine(rightEye.x - rightEye.r, rightEye.y, rightEye.r * 2, ILI9341_CYAN);
-        } else {
-            // Draw outer eyeballs
-            tft.drawCircle(leftEye.x, leftEye.y, leftEye.r, ILI9341_CYAN);
-            tft.drawCircle(rightEye.x, rightEye.y, rightEye.r, ILI9341_CYAN);
-
-            // Draw inner pupils (procedurally shifted)
-            tft.fillCircle(leftEye.currentX, leftEye.currentY, leftPupilR, ILI9341_CYAN);
-            tft.fillCircle(rightEye.currentX, rightEye.currentY, rightPupilR, ILI9341_CYAN);
-
-            // Draw expressive eyebrows based on states (adjusted to fit smaller radius)
-            if (strcmp(currentEyeState, "LISTENING") == 0) {
-                // Raise eyebrows high (curious/attentive)
-                tft.drawFastHLine(leftEye.x - 14, leftEye.y - 27, 28, ILI9341_CYAN);
-                tft.drawFastHLine(rightEye.x - 14, rightEye.y - 27, 28, ILI9341_CYAN);
-            } else if (strcmp(currentEyeState, "THINKING") == 0) {
-                // Slant eyebrows inwards (focused frowny eyebrows)
-                tft.drawLine(leftEye.x - 14, leftEye.y - 23, leftEye.x + 11, leftEye.y - 28, ILI9341_CYAN);
-                tft.drawLine(rightEye.x - 11, rightEye.y - 28, rightEye.x + 14, rightEye.y - 23, ILI9341_CYAN);
-            } else if (strcmp(currentEyeState, "SPEAKING") == 0) {
-                // Bouncing eyebrows matching speech sine wave
-                int yOffset = (int)(1.5 * sin(millis() / 120.0));
-                tft.drawFastHLine(leftEye.x - 14, leftEye.y - 25 + yOffset, 28, ILI9341_CYAN);
-                tft.drawFastHLine(rightEye.x - 14, rightEye.y - 25 + yOffset, 28, ILI9341_CYAN);
+            int r = 15;
+            int thick = 3;
+            if (isBlinking) {
+                tft.drawFastHLine(135 - r, leftEyeY, r * 2, ILI9341_CYAN);
+                tft.drawFastHLine(185 - r, rightEyeY, r * 2, ILI9341_CYAN);
             } else {
-                // Relaxed horizontal eyebrows
-                tft.drawFastHLine(leftEye.x - 14, leftEye.y - 24, 28, ILI9341_CYAN);
-                tft.drawFastHLine(rightEye.x - 14, rightEye.y - 24, 28, ILI9341_CYAN);
+                drawThickUpperArc(135, leftEyeY, r, thick, ILI9341_CYAN);
+                drawThickUpperArc(185, rightEyeY, r, thick, ILI9341_CYAN);
+            }
+        } else {
+            // Clear assistant eyes bounding box (X: 70 to 250, Y: 70 to 140)
+            tft.fillRect(70, 70, 180, 70, ILI9341_BLACK);
+
+            int r = 28;
+            int thick = 5;
+            if (isBlinking) {
+                tft.drawFastHLine(120 - r, leftEyeY, r * 2, ILI9341_CYAN);
+                tft.drawFastHLine(200 - r, rightEyeY, r * 2, ILI9341_CYAN);
+            } else {
+                drawThickUpperArc(120, leftEyeY, r, thick, ILI9341_CYAN);
+                drawThickUpperArc(200, rightEyeY, r, thick, ILI9341_CYAN);
             }
         }
 
-        lastLeftEyeX = leftEye.currentX;
-        lastLeftEyeY = leftEye.currentY;
+        lastLeftEyeX = leftEye.currentX; // retain coordinates alignment
+        lastLeftEyeY = leftEyeY;
         lastRightEyeX = rightEye.currentX;
-        lastRightEyeY = rightEye.currentY;
-        lastLeftPupilR = leftPupilR;
-        lastRightPupilR = rightPupilR;
+        lastRightEyeY = rightEyeY;
         lastBlinking = isBlinking;
         strncpy(lastDrawnEyeState, currentEyeState, sizeof(lastDrawnEyeState) - 1);
         lastDrawnEyeState[sizeof(lastDrawnEyeState) - 1] = '\0';

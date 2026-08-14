@@ -17,7 +17,7 @@ void fetchAlbumArt() {
     
     HTTPClient http;
     char url[128];
-    snprintf(url, sizeof(url), "http://%s:%d/music/album-art-rgb565", SERVER_HOST, SERVER_PORT);
+    snprintf(url, sizeof(url), "http://%s:%d/api/music/album-art-rgb565", SERVER_HOST, SERVER_PORT);
     
     Serial.printf("[HTTP] Downloading album art from: %s\n", url);
     http.begin(url);

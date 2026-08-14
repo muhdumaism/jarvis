@@ -144,7 +144,7 @@ void handleWebSocketMessage(WStype_t type, uint8_t * payload, size_t length) {
                         if (isPlaying) {
                             setSystemState("SPOTIFY_PLAYING");
                         } else {
-                            setSystemState("SPOTIFY_PAUSED");
+                            setSystemState("IDLE");
                         }
                     } else {
                         setSystemState("IDLE");
