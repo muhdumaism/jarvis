@@ -13,6 +13,93 @@ export const Voice: React.FC = () => {
   
   const recorderRef = useRef<AudioRecorder | null>(null);
   const messageIdRef = useRef<string | null>(null);
+  const [handsFree, setHandsFree] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  // HTML5 synthesizer for wake beep
+  const playWakeBeep = () => {
+    try {
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      const audioCtx = new AudioCtxClass();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(600, audioCtx.currentTime); // 600Hz tone
+      gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+
+      oscillator.start();
+      // Smooth decay
+      gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.15);
+      oscillator.stop(audioCtx.currentTime + 0.15);
+    } catch (e) {
+      console.warn("Failed to play audio alert:", e);
+    }
+  };
+
+  // Continuous wake-word listener (SpeechRecognition API)
+  useEffect(() => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      console.warn("Speech Recognition not supported in this browser.");
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const rec = new SpeechRecognition();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-US';
+
+    rec.onresult = (event: any) => {
+      if (isRecording) return;
+
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal || event.results[i][0].confidence > 0.25) {
+          const text = event.results[i][0].transcript.toLowerCase();
+          console.log("[Wake Word Listener]:", text);
+          if (text.includes("jarvis") || text.includes("java") || text.includes("travis") || text.includes("charvis")) {
+            console.log("Wake word detected! Launching hands-free session.");
+            playWakeBeep();
+            rec.stop();
+            startVoiceInput();
+            break;
+          }
+        }
+      }
+    };
+
+    rec.onend = () => {
+      // Auto-restart if hands-free is enabled and we are not recording a command
+      if (handsFree && !isRecording) {
+        try {
+          rec.start();
+        } catch (e) {
+          // Already active
+        }
+      }
+    };
+
+    recognitionRef.current = rec;
+
+    if (handsFree) {
+      if (!isRecording) {
+        try {
+          rec.start();
+        } catch (e) {
+          console.error("Failed to start speech recognition:", e);
+        }
+      }
+    } else {
+      rec.stop();
+    }
+
+    return () => {
+      rec.stop();
+    };
+  }, [handsFree, isRecording]);
 
   // Clean up recording on unmount
   useEffect(() => {
@@ -36,13 +123,18 @@ export const Voice: React.FC = () => {
       });
 
       // 2. Initialize and start Audio Recorder
-      const recorder = new AudioRecorder((base64Chunk) => {
-        sendWSMessage({
-          type: 'VOICE_AUDIO',
-          message_id: msgId,
-          audio: base64Chunk,
-        });
-      });
+      const recorder = new AudioRecorder(
+        (base64Chunk) => {
+          sendWSMessage({
+            type: 'VOICE_AUDIO',
+            message_id: msgId,
+            audio: base64Chunk,
+          });
+        },
+        () => {
+          stopVoiceInput();
+        }
+      );
 
       await recorder.start();
       recorderRef.current = recorder;
@@ -202,16 +294,35 @@ export const Voice: React.FC = () => {
               <div className="space-y-1">
                 <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
                   {isRecording
-                    ? 'Listening... Tap to stop'
+                    ? 'Listening... Speak now'
                     : voice.status === 'thinking'
                     ? 'AI is thinking...'
                     : voice.status === 'speaking'
                     ? 'JARVIS is speaking...'
+                    : handsFree
+                    ? 'Say "JARVIS" to trigger'
                     : 'Tap to speak to JARVIS'}
                 </p>
                 <p className="text-xs text-slate-400 font-semibold">
-                  (Voice response plays via ESP32)
+                  (Voice response plays via PC Speaker)
                 </p>
+              </div>
+
+              {/* Hands-free mode switch */}
+              <div className="flex items-center gap-3 mt-4 pt-4 border-t border-slate-300/30 w-full justify-center">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Hands-Free Mode:</span>
+                <button
+                  onClick={() => setHandsFree(!handsFree)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    handsFree ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      handsFree ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
 
               {errorMsg && (

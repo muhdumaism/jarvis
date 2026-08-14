@@ -10,9 +10,13 @@ export class AudioRecorder {
   private processorNode: ScriptProcessorNode | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private onChunk: (base64Chunk: string) => void;
+  private onSilence: (() => void) | null = null;
+  private hasSpoken = false;
+  private silentChunks = 0;
 
-  constructor(onChunk: (base64Chunk: string) => void) {
+  constructor(onChunk: (base64Chunk: string) => void, onSilence?: () => void) {
     this.onChunk = onChunk;
+    this.onSilence = onSilence || null;
   }
 
   public async start(): Promise<void> {
@@ -39,9 +43,34 @@ export class AudioRecorder {
     this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
     this.processorNode = this.audioContext.createScriptProcessor(4096, 1, 1);
 
+    this.hasSpoken = false;
+    this.silentChunks = 0;
+
     this.processorNode.onaudioprocess = (e) => {
       const inputBuffer = e.inputBuffer.getChannelData(0); // Float32Array
       
+      // Calculate RMS energy to detect speech vs silence
+      let sum = 0;
+      for (let i = 0; i < inputBuffer.length; i++) {
+        sum += inputBuffer[i] * inputBuffer[i];
+      }
+      const rms = Math.sqrt(sum / inputBuffer.length);
+
+      if (rms > 0.015) {
+        this.hasSpoken = true;
+        this.silentChunks = 0;
+      } else if (this.hasSpoken) {
+        this.silentChunks++;
+        // 5 chunks at 256ms = ~1.28 seconds of silence
+        if (this.silentChunks >= 5) {
+          console.log("Local silence detected. Triggering auto-stop.");
+          if (this.onSilence) {
+            this.onSilence();
+          }
+          return;
+        }
+      }
+
       // Convert Float32 to Int16 PCM
       const pcmBuffer = this.floatTo16BitPCM(inputBuffer);
       
