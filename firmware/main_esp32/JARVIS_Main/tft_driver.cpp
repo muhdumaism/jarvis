@@ -7,8 +7,18 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(&hspi, TFT_DC, TFT_CS, TFT_RST);
 void initTFT() {
     Serial.println("[TFT] Initializing SPI display...");
     
+    // Hardware reset the TFT controller to guarantee initialization
+    pinMode(TFT_RST, OUTPUT);
+    digitalWrite(TFT_RST, HIGH);
+    delay(50);
+    digitalWrite(TFT_RST, LOW);
+    delay(50);
+    digitalWrite(TFT_RST, HIGH);
+    delay(50);
+    
     // Explicit SPI pins configuration on HSPI
-    hspi.begin(TFT_SCLK, TFT_MISO, TFT_MOSI, TFT_CS);
+    // Pass -1 to ss_pin to let Adafruit library manually control CS pin 15
+    hspi.begin(TFT_SCLK, TFT_MISO, TFT_MOSI, -1);
     
     tft.begin();
     tft.setRotation(TFT_ROTATION);
