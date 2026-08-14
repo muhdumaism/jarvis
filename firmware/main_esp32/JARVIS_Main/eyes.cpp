@@ -132,6 +132,30 @@ void resetEyesDrawCache() {
     lastDrawnEyeState[0] = '\0';
 }
 
+void drawThickUpperArc(int x0, int y0, int r, int thickness, uint16_t color) {
+    for (int curR = r - thickness + 1; curR <= r; curR++) {
+        int x = 0;
+        int y = curR;
+        int d = 3 - 2 * curR;
+        
+        while (y >= x) {
+            // Draw upper half of circle
+            tft.drawPixel(x0 + x, y0 - y, color);
+            tft.drawPixel(x0 - x, y0 - y, color);
+            tft.drawPixel(x0 + y, y0 - x, color);
+            tft.drawPixel(x0 - y, y0 - x, color);
+            
+            if (d < 0) {
+                d += 4 * x + 6;
+            } else {
+                d += 4 * (x - y) + 10;
+                y--;
+            }
+            x++;
+        }
+    }
+}
+
 void drawEyes() {
     // 1. Calculate state-based pupil sizes
     int leftPupilR = leftEye.r / 2;

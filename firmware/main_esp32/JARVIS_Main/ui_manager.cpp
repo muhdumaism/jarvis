@@ -1,6 +1,64 @@
 #include "ui_manager.h"
 #include "eyes.h"
 #include "tft_driver.h"
+#include <HTTPClient.h>
+#include <WiFi.h>
+
+// Album art binary storage (64x64 pixels, 16-bit color = 8192 bytes)
+uint16_t albumArtBuffer[64 * 64];
+bool albumArtLoaded = false;
+char lastLoadedTrackTitle[64] = "";
+
+void fetchAlbumArt() {
+    if (WiFi.status() != WL_CONNECTED) {
+        albumArtLoaded = false;
+        return;
+    }
+    
+    HTTPClient http;
+    char url[128];
+    snprintf(url, sizeof(url), "http://%s:%d/music/album-art-rgb565", SERVER_HOST, SERVER_PORT);
+    
+    Serial.printf("[HTTP] Downloading album art from: %s\n", url);
+    http.begin(url);
+    http.setTimeout(4000); // 4 seconds timeout
+    
+    int httpCode = http.GET();
+    if (httpCode == HTTP_CODE_OK) {
+        WiFiClient* stream = http.getStreamPtr();
+        int totalBytes = 64 * 64 * 2;
+        int bytesRead = 0;
+        uint8_t* ptr = (uint8_t*)albumArtBuffer;
+        
+        unsigned long startMs = millis();
+        while (http.connected() && bytesRead < totalBytes && (millis() - startMs < 5000)) {
+            size_t size = stream->available();
+            if (size > 0) {
+                int toRead = min((int)size, totalBytes - bytesRead);
+                int readCount = stream->readBytes(ptr + bytesRead, toRead);
+                bytesRead += readCount;
+            }
+            delay(1);
+        }
+        
+        if (bytesRead == totalBytes) {
+            // Swap byte order because ESP32 is little-endian but HTTP stream is network (big-endian) bytes
+            for (int i = 0; i < 64 * 64; i++) {
+                uint16_t val = albumArtBuffer[i];
+                albumArtBuffer[i] = (val << 8) | (val >> 8);
+            }
+            albumArtLoaded = true;
+            Serial.println("[HTTP] Album art loaded successfully!");
+        } else {
+            Serial.printf("[HTTP] Download incomplete. Got %d of %d bytes.\n", bytesRead, totalBytes);
+            albumArtLoaded = false;
+        }
+    } else {
+        Serial.printf("[HTTP] GET failed, code: %d\n", httpCode);
+        albumArtLoaded = false;
+    }
+    http.end();
+}
 
 char currentSystemState[32] = "IDLE";
 bool wifiConnected = false;
@@ -101,19 +159,36 @@ void setTrackInfo(const char* title, const char* artist, int positionMs, int dur
     lastMusicUpdate = millis();
 }
 
+void drawWifiIcon(int x, int y, bool connected) {
+    uint16_t color = connected ? ILI9341_CYAN : ILI9341_RED;
+    tft.fillRect(x, y + 8, 2, 2, color);
+    tft.fillRect(x + 3, y + 6, 2, 4, color);
+    tft.fillRect(x + 6, y + 4, 2, 6, color);
+    tft.fillRect(x + 9, y + 2, 2, 8, color);
+}
+
 void drawHeader() {
-    // Only draw header if WiFi status changes, or periodically every 5 seconds
     if (wifiConnected != lastWifiConnected || millis() - lastHeaderDraw > 5000) {
         lastWifiConnected = wifiConnected;
         lastHeaderDraw = millis();
-        tft.fillRect(0, 0, TFT_WIDTH, 24, ILI9341_DARKGREY);
-        tft.setTextSize(1);
+        
+        // Clear top header area (Y: 0 to 30)
+        tft.fillRect(0, 0, TFT_WIDTH, 30, ILI9341_BLACK);
+        
+        // Futurist JARVIS Logo and Underline
+        tft.setTextSize(2);
         tft.setTextColor(ILI9341_WHITE);
-        tft.setCursor(8, 8);
-        tft.print("JARVIS ASSISTANT");
-
-        // WiFi status indicator dot
-        tft.fillCircle(TFT_WIDTH - 15, 12, 4, wifiConnected ? ILI9341_GREEN : ILI9341_RED);
+        tft.setCursor(10, 8);
+        tft.print("JARVIS");
+        tft.drawFastHLine(10, 27, 72, ILI9341_CYAN);
+        
+        // System Online Status and Wifi Bars
+        tft.setTextSize(1);
+        tft.setTextColor(ILI9341_CYAN);
+        tft.setCursor(TFT_WIDTH - 110, 12);
+        tft.print(wifiConnected ? "SYSTEM ONLINE" : "OFFLINE");
+        
+        drawWifiIcon(TFT_WIDTH - 20, 8, wifiConnected);
     }
 }
 
@@ -125,13 +200,35 @@ void drawMusicOverlay(const char* state) {
                          strcmp(state, lastSystemState) != 0);
 
     if (trackChanged) {
-        tft.fillRect(0, 150, TFT_WIDTH, TFT_HEIGHT - 150, ILI9341_BLACK);
+        // Clear music metadata area (X: 0 to 320, Y: 30 to 110)
+        tft.fillRect(0, 30, TFT_WIDTH, 80, ILI9341_BLACK);
+
+        // Fetch album art on track change
+        if (strcmp(currentTitle, lastLoadedTrackTitle) != 0) {
+            strncpy(lastLoadedTrackTitle, currentTitle, sizeof(lastLoadedTrackTitle) - 1);
+            lastLoadedTrackTitle[sizeof(lastLoadedTrackTitle) - 1] = '\0';
+            albumArtLoaded = false;
+            fetchAlbumArt();
+        }
+
+        // Draw Album Art (64x64 at X=20, Y=40)
+        if (albumArtLoaded) {
+            tft.drawRGBBitmap(20, 40, albumArtBuffer, 64, 64);
+        } else {
+            // Draw Art Placeholder
+            tft.fillRect(20, 40, 64, 64, ILI9341_DARKGREY);
+            tft.drawRect(20, 40, 64, 64, ILI9341_CYAN);
+            tft.setTextSize(1);
+            tft.setTextColor(ILI9341_LIGHTGREY);
+            tft.setCursor(38, 68);
+            tft.print("ART");
+        }
 
         // Title
         tft.setTextSize(2);
         tft.setTextColor(ILI9341_WHITE);
-        tft.setCursor(20, 155);
-        char titleCopy[24];
+        tft.setCursor(95, 45);
+        char titleCopy[18];
         strncpy(titleCopy, currentTitle, sizeof(titleCopy) - 1);
         titleCopy[sizeof(titleCopy) - 1] = '\0';
         tft.print(titleCopy[0] ? titleCopy : "No Track");
@@ -139,11 +236,21 @@ void drawMusicOverlay(const char* state) {
         // Artist
         tft.setTextSize(1);
         tft.setTextColor(ILI9341_LIGHTGREY);
-        tft.setCursor(20, 175);
+        tft.setCursor(95, 68);
         char artistCopy[32];
         strncpy(artistCopy, currentArtist, sizeof(artistCopy) - 1);
         artistCopy[sizeof(artistCopy) - 1] = '\0';
-        tft.print(artistCopy[0] ? artistCopy : "");
+        tft.print(artistCopy[0] ? artistCopy : "Unknown Artist");
+
+        // Speaker status
+        tft.setCursor(95, 85);
+        if (speakerConnected) {
+            tft.setTextColor(ILI9341_GREEN);
+            tft.print("SPK: CONNECTED");
+        } else {
+            tft.setTextColor(ILI9341_RED);
+            tft.print("SPK: OFFLINE");
+        }
 
         strncpy(lastTitle, currentTitle, sizeof(lastTitle) - 1);
         lastTitle[sizeof(lastTitle) - 1] = '\0';
@@ -185,18 +292,7 @@ void drawMusicOverlay(const char* state) {
         tft.printf("%d:%02d / %d:%02d", currentPos / 60000, (currentPos % 60000) / 1000,
                                         trackDuration / 60000, (trackDuration % 60000) / 1000);
 
-        // Speaker status (partial area redraw)
-        tft.fillRect(TFT_WIDTH - 130, 205, 120, 12, ILI9341_BLACK);
-        tft.setCursor(TFT_WIDTH - 130, 205);
-        if (speakerConnected) {
-            tft.setTextColor(ILI9341_GREEN);
-            tft.print("SPK: CONNECTED");
-        } else {
-            tft.setTextColor(ILI9341_RED);
-            tft.print("SPK: DISCONNECTED");
-        }
-
-        // State bottom overlay (partial area redraw)
+        // State bottom overlay
         tft.fillRect(20, 220, 200, 12, ILI9341_BLACK);
         tft.setCursor(20, 220);
         tft.setTextColor(ILI9341_CYAN);
@@ -205,32 +301,6 @@ void drawMusicOverlay(const char* state) {
         lastTrackPosition = currentPos;
         lastTrackDuration = trackDuration;
     }
-}
-
-void drawSpeakerDisconnectedScreen() {
-    tft.fillRect(0, 150, TFT_WIDTH, TFT_HEIGHT - 150, ILI9341_BLACK);
-    tft.setTextSize(2);
-    tft.setTextColor(ILI9341_RED);
-    tft.setCursor(20, 160);
-    tft.print("Speaker Offline");
-
-    tft.setTextSize(1);
-    tft.setTextColor(ILI9341_LIGHTGREY);
-    tft.setCursor(20, 190);
-    tft.print("Check Bluetooth Speaker connection");
-}
-
-void drawBackendDisconnectedScreen() {
-    tft.fillRect(0, 150, TFT_WIDTH, TFT_HEIGHT - 150, ILI9341_BLACK);
-    tft.setTextSize(2);
-    tft.setTextColor(ILI9341_RED);
-    tft.setCursor(20, 160);
-    tft.print("Server Offline");
-
-    tft.setTextSize(1);
-    tft.setTextColor(ILI9341_LIGHTGREY);
-    tft.setCursor(20, 190);
-    tft.print("Reconnecting to JARVIS Backend...");
 }
 
 void drawWrappedText(const char* text, int x, int y, int maxChars, int maxLines) {
@@ -270,109 +340,7 @@ void drawWrappedText(const char* text, int x, int y, int maxChars, int maxLines)
 }
 
 void drawDashboardLayout() {
-    // 1. Draw static dividers and frames once
-    static bool dividersDrawn = false;
-    if (!dividersDrawn || strcmp(currentSystemState, lastDashboardState) != 0) {
-        tft.drawFastVLine(106, 24, TFT_HEIGHT - 24, ILI9341_DARKGREY);
-        tft.drawFastVLine(214, 24, TFT_HEIGHT - 24, ILI9341_DARKGREY);
-        tft.drawRoundRect(217, 30, 100, 202, 4, ILI9341_DARKGREY);
-        
-        dividersDrawn = true;
-        strncpy(lastDashboardState, currentSystemState, sizeof(lastDashboardState) - 1);
-        lastDashboardState[sizeof(lastDashboardState) - 1] = '\0';
-    }
-
-    // 2. Draw Left Column (Room Telemetry Cards)
-    bool leftChanged = (activeLightsCount != lastActiveLightsCount ||
-                        isFanActive != lastIsFanActive ||
-                        abs(roomTemperature - lastRoomTemperature) > 0.05 ||
-                        doorLocked != lastDoorLocked);
-                        
-    if (leftChanged) {
-        // Clear panel area X: 0 to 105, Y: 25 to 240
-        tft.fillRect(0, 25, 105, TFT_HEIGHT - 25, ILI9341_BLACK);
-        
-        // Temperature
-        tft.setTextColor(ILI9341_ORANGE);
-        tft.setTextSize(1);
-        tft.setCursor(6, 32);
-        tft.print("ROOM TEMP");
-        tft.setTextColor(ILI9341_WHITE);
-        tft.setTextSize(2);
-        tft.setCursor(6, 44);
-        tft.printf("%.1f C", roomTemperature);
-
-        // Lights
-        tft.setTextColor(ILI9341_YELLOW);
-        tft.setTextSize(1);
-        tft.setCursor(6, 82);
-        tft.print("LIGHTS");
-        tft.setTextColor(ILI9341_WHITE);
-        tft.setTextSize(2);
-        tft.setCursor(6, 94);
-        if (activeLightsCount > 0) {
-            tft.printf("%d ON", activeLightsCount);
-        } else {
-            tft.print("OFF");
-        }
-
-        // Fan
-        tft.setTextColor(ILI9341_GREEN);
-        tft.setTextSize(1);
-        tft.setCursor(6, 132);
-        tft.print("FAN");
-        tft.setTextColor(ILI9341_WHITE);
-        tft.setTextSize(2);
-        tft.setCursor(6, 144);
-        tft.print(isFanActive ? "RUNNING" : "STOPPED");
-
-        // Door Lock
-        tft.setTextColor(ILI9341_RED);
-        tft.setTextSize(1);
-        tft.setCursor(6, 182);
-        tft.print("SECURITY");
-        tft.setTextColor(ILI9341_WHITE);
-        tft.setTextSize(2);
-        tft.setCursor(6, 194);
-        tft.print(doorLocked ? "LOCKED" : "OPEN");
-
-        lastActiveLightsCount = activeLightsCount;
-        lastIsFanActive = isFanActive;
-        lastRoomTemperature = roomTemperature;
-        lastDoorLocked = doorLocked;
-    }
-
-    // 3. Draw Right Column (Speech Bubble)
-    bool rightChanged = (strcmp(lastUserQuery, lastUserQueryCache) != 0 ||
-                         strcmp(lastJarvisReply, lastJarvisReplyCache) != 0);
-                         
-    if (rightChanged) {
-        tft.fillRect(218, 31, 95, 200, ILI9341_BLACK);
-        tft.drawRoundRect(217, 30, 100, 202, 4, ILI9341_DARKGREY);
-
-        // User Query
-        tft.setTextColor(ILI9341_CYAN);
-        tft.setTextSize(1);
-        tft.setCursor(221, 36);
-        tft.print("UMAI:");
-        
-        tft.setTextColor(ILI9341_WHITE);
-        drawWrappedText(lastUserQuery, 221, 47, 15, 6);
-
-        // Assistant Response
-        tft.setTextColor(ILI9341_BLUE);
-        tft.setTextSize(1);
-        tft.setCursor(221, 115);
-        tft.print("JARVIS:");
-        
-        tft.setTextColor(ILI9341_GREEN);
-        drawWrappedText(lastJarvisReply, 221, 126, 15, 9);
-
-        strncpy(lastUserQueryCache, lastUserQuery, sizeof(lastUserQueryCache) - 1);
-        lastUserQueryCache[sizeof(lastUserQueryCache) - 1] = '\0';
-        strncpy(lastJarvisReplyCache, lastJarvisReply, sizeof(lastJarvisReplyCache) - 1);
-        lastJarvisReplyCache[sizeof(lastJarvisReplyCache) - 1] = '\0';
-    }
+    // Unused in current clean layout mode but retained for function signatures consistency
 }
 
 void setLastUserQuery(const char* query) {
@@ -411,36 +379,74 @@ void updateTFTDeviceState(const char* deviceId, const char* state) {
     }
 }
 
+void drawWaveform(int centerX, int centerY) {
+    int numBars = 9;
+    int barWidth = 3;
+    int spacing = 3;
+    int maxH = 20;
+    
+    // Clear only the waveform horizontal area to reduce flicker
+    tft.fillRect(centerX - 30, centerY - 12, 60, 24, ILI9341_BLACK);
+    
+    for (int i = 0; i < numBars; i++) {
+        int h = 2;
+        if (strcmp(currentSystemState, "LISTENING") == 0) {
+            h = 4 + random(maxH - 4);
+        } else if (strcmp(currentSystemState, "SPEAKING") == 0) {
+            h = 4 + (int)((maxH - 4) * abs(sin(millis() / 80.0 + i)));
+        } else if (strcmp(currentSystemState, "THINKING") == 0) {
+            h = 4 + (int)(6 * sin(millis() / 150.0 + i));
+        }
+        
+        int x = centerX - ((numBars * (barWidth + spacing) - spacing) / 2) + i * (barWidth + spacing);
+        tft.fillRect(x, centerY - h/2, barWidth, h, ILI9341_CYAN);
+    }
+}
+
 void updateUI() {
     drawHeader();
 
-    // Map system state to eye animations & overlays
-    if (strcmp(currentSystemState, "SPOTIFY_PLAYING") == 0 || strcmp(currentSystemState, "SPOTIFY_PAUSED") == 0) {
-        updateEyes("IDLE");
-        drawEyes();
+    bool isMusicMode = (strcmp(currentSystemState, "SPOTIFY_PLAYING") == 0 || 
+                        strcmp(currentSystemState, "SPOTIFY_PAUSED") == 0);
+
+    if (isMusicMode) {
+        // 1. Music mode UI with Album Art and progress
         drawMusicOverlay(currentSystemState);
-    } else if (strcmp(currentSystemState, "SPEAKER_DISCONNECTED") == 0) {
-        updateEyes("THINKING"); // Spin/searching animation
+        updateEyes("IDLE"); // Music bobs eyes inside drawEyes()
         drawEyes();
-        
-        if (strcmp(currentSystemState, lastDrawnState) != 0) {
-            drawSpeakerDisconnectedScreen();
-            strncpy(lastDrawnState, currentSystemState, sizeof(lastDrawnState) - 1);
-            lastDrawnState[sizeof(lastDrawnState) - 1] = '\0';
-        }
-    } else if (strcmp(currentSystemState, "BACKEND_DISCONNECTED") == 0) {
-        updateEyes("THINKING"); // Reconnecting eyes
-        drawEyes();
-        
-        if (strcmp(currentSystemState, lastDrawnState) != 0) {
-            drawBackendDisconnectedScreen();
-            strncpy(lastDrawnState, currentSystemState, sizeof(lastDrawnState) - 1);
-            lastDrawnState[sizeof(lastDrawnState) - 1] = '\0';
-        }
     } else {
-        // Holographic split room dashboard rendering
-        drawDashboardLayout();
+        // 2. Minimal Clean Assistant Screen (Mockup matching)
         updateEyes(currentSystemState);
         drawEyes();
+        
+        // Animated audio waveform
+        drawWaveform(160, 195);
+        
+        // Status text overlay
+        static char lastStatusText[32] = "";
+        char currentStatusText[32] = "";
+        
+        if (strcmp(currentSystemState, "BACKEND_DISCONNECTED") == 0) {
+            strcpy(currentStatusText, "SERVER OFFLINE");
+        } else if (strcmp(currentSystemState, "SPEAKER_DISCONNECTED") == 0) {
+            strcpy(currentStatusText, "SPEAKER OFFLINE");
+        } else {
+            strncpy(currentStatusText, currentSystemState, sizeof(currentStatusText) - 1);
+            currentStatusText[sizeof(currentStatusText) - 1] = '\0';
+        }
+        
+        if (strcmp(currentStatusText, lastStatusText) != 0) {
+            tft.fillRect(60, 212, 200, 12, ILI9341_BLACK);
+            tft.setTextSize(1);
+            tft.setTextColor(ILI9341_CYAN);
+            
+            // Center the text
+            int textWidth = strlen(currentStatusText) * 6;
+            tft.setCursor(160 - textWidth / 2, 212);
+            tft.print(currentStatusText);
+            
+            strncpy(lastStatusText, currentStatusText, sizeof(lastStatusText) - 1);
+            lastStatusText[sizeof(lastStatusText) - 1] = '\0';
+        }
     }
 }

@@ -97,6 +97,47 @@ async def get_album_art(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error resizing album art: {e}")
 
+@router.get("/album-art-rgb565")
+async def get_album_art_rgb565(
+    music_manager=Depends(_get_music_manager)
+):
+    """Get currently playing album art as raw RGB565 big-endian bytes (64x64)."""
+    state = await music_manager.get_state()
+    track = state.get("track")
+    
+    if not track or not track.get("album_art_url"):
+        raise HTTPException(status_code=404, detail="No track playing or album art unavailable")
+
+    art_url = track["album_art_url"]
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(art_url, timeout=5.0)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=404, detail="Failed to fetch album art")
+            
+            if PILLOW_AVAILABLE:
+                img = Image.open(io.BytesIO(resp.content))
+                img = img.resize((64, 64), Image.Resampling.LANCZOS)
+                img = img.convert("RGB")
+                
+                rgb565_data = bytearray()
+                for y in range(64):
+                    for x in range(64):
+                        r, g, b = img.getpixel((x, y))
+                        r5 = (r >> 3) & 0x1F
+                        g6 = (g >> 2) & 0x3F
+                        b5 = (b >> 3) & 0x1F
+                        val = (r5 << 11) | (g6 << 5) | b5
+                        # Big endian bytes
+                        rgb565_data.append((val >> 8) & 0xFF)
+                        rgb565_data.append(val & 0xFF)
+                return Response(content=bytes(rgb565_data), media_type="application/octet-stream")
+            else:
+                raise HTTPException(status_code=500, detail="PIL not available for RGB565 conversion")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/search")
 async def search_music(
     q: str,
