@@ -141,7 +141,7 @@ For device control: {{"intent": "device_control", "target": "<device_id>", "acti
 For music: {{"intent": "spotify_play|spotify_pause|spotify_resume|spotify_skip|spotify_previous|spotify_volume_up|spotify_volume_down|spotify_current_track|spotify_search|spotify_play_playlist|spotify_play_liked|spotify_stop", "query": "<search query or playlist name>", "value": <optional number>}}
 For scene: {{"intent": "scene_activate", "scene_name": "<name>"}}
 For room query: {{"intent": "room_query", "query": "<what to query>"}}
-For weather: {{"intent": "weather_query", "location": "<city name, default to Delhi>"}}
+For weather: {{"intent": "weather_query", "location": "<city name, default to {settings.default_weather_location}>"}}
 For setting alarm: {{"intent": "set_alarm", "time": "HH:MM", "am_pm": "AM|PM", "delay_minutes": <optional number of minutes to wait>}}
 For stopping alarm: {{"intent": "stop_alarm"}}
 For conversation: {{"intent": "conversation", "response": "<short friendly reply>"}}
@@ -443,7 +443,7 @@ JSON:"""
         self, intent_data: Dict[str, Any], message_id: str
     ) -> Dict[str, Any]:
         """Execute a weather forecast intent query using Open-Meteo API."""
-        location = intent_data.get("location", "Delhi")
+        location = intent_data.get("location") or settings.default_weather_location
         
         # Publish executing event
         await self.event_bus.publish(JarvisEvent(
@@ -454,7 +454,7 @@ JSON:"""
         ))
 
         try:
-            city = location.strip() if location else "Delhi"
+            city = location.strip() if location else settings.default_weather_location
             
             # 1. Geocode location name to latitude and longitude
             geocode_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1&language=en&format=json"

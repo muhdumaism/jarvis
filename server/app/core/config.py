@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     ai_provider: str = "ollama"
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2:1b"
+    default_weather_location: str = "Nilambur"
 
     # --- TTS ---
     tts_provider: str = "piper"
