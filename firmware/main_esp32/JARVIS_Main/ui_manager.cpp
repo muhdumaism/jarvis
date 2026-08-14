@@ -135,7 +135,6 @@ void setSystemState(const char* newState) {
     if (strcmp(currentSystemState, newState) != 0) {
         strncpy(currentSystemState, newState, sizeof(currentSystemState) - 1);
         currentSystemState[sizeof(currentSystemState) - 1] = '\0';
-        clearDisplay(); // clear whole frame on state change
         invalidateUICaches(); // Force redraw of all graphics elements
         Serial.printf("[UI] State changed to: %s\n", currentSystemState);
     }
