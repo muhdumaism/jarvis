@@ -177,11 +177,20 @@ class AlarmManager:
             # Alternating high-reliability tone beeps
             while self.is_alarm_ringing:
                 winsound.Beep(1800, 350)
-                time.sleep(0.15)
+                
+                # Check is_alarm_ringing state in short 50ms intervals
+                for _ in range(3):
+                    if not self.is_alarm_ringing:
+                        break
+                    time.sleep(0.05)
                 if not self.is_alarm_ringing:
                     break
+
                 winsound.Beep(1400, 350)
-                time.sleep(0.35)
+                for _ in range(7):
+                    if not self.is_alarm_ringing:
+                        break
+                    time.sleep(0.05)
 
             winsound.PlaySound(None, 0)
         except Exception as e:

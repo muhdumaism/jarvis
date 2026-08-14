@@ -136,6 +136,11 @@ class VoicePipeline:
                     await self.music_manager.execute_command("pause")
                     self._paused_for_voice = True
 
+            # Silence alarm if active/ringing
+            if self.alarm_manager and self.alarm_manager.is_alarm_ringing:
+                logger.info("voice.alarm.silence_on_voice_start", message_id=msg_id)
+                await self.alarm_manager.stop_ringing()
+
             await self.event_bus.publish(JarvisEvent(
                 type="VOICE_LISTENING",
                 source="voice",
