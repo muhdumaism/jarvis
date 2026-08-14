@@ -165,7 +165,11 @@ JSON:"""
             brace_end = response.rfind("}") + 1
             if brace_start >= 0 and brace_end > brace_start:
                 try:
-                    parsed = json.loads(response[brace_start:brace_end])
+                    cleaned = response[brace_start:brace_end]
+                    # Strip trailing extra braces if model outputted double braces (e.g. }})
+                    while cleaned.count("}") > cleaned.count("{"):
+                        cleaned = cleaned.rstrip("}")
+                    parsed = json.loads(cleaned)
                 except json.JSONDecodeError:
                     pass
 
@@ -180,7 +184,11 @@ JSON:"""
             brace_end = resp_str.rfind("}") + 1
             if brace_start >= 0 and brace_end > brace_start:
                 try:
-                    nested = json.loads(resp_str[brace_start:brace_end])
+                    cleaned_nested = resp_str[brace_start:brace_end]
+                    # Strip trailing extra braces
+                    while cleaned_nested.count("}") > cleaned_nested.count("{"):
+                        cleaned_nested = cleaned_nested.rstrip("}")
+                    nested = json.loads(cleaned_nested)
                     if isinstance(nested, dict) and "intent" in nested:
                         logger.info("intent.parser.nested_fallback", nested_intent=nested["intent"])
                         return nested
