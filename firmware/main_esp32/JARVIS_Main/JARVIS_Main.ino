@@ -26,7 +26,7 @@ TaskHandle_t NetworkTaskHandle = NULL;
 // Shared Voice State variables
 bool isCapturingVoice = false;
 unsigned long lastSpeechTime = 0;
-const int energyVADThreshold = 1500; // Energy VAD trigger floor (increased to filter noise)
+const int energyVADThreshold = 1000; // Energy VAD trigger floor (1000 is highly stable with DC offset removed)
 const int VADStartDuration = 150;   // Speak for 150ms to trigger
 const int VADEndDuration = 1000;    // Silence for 1000ms (1 second) to stop
 
@@ -80,14 +80,21 @@ void VoiceTask(void* pvParameters) {
     for (;;) {
         if (readMicrophone(audioBuffer, sizeof(audioBuffer), &bytesRead) && bytesRead > 0) {
             // Calculate average RMS energy to detect voice
-            long sum = 0;
+            // 1. Calculate DC offset (mean value of samples) to remove background bias
+            long sampleSum = 0;
             int samples = bytesRead / 2;
             int16_t* pcmSamples = (int16_t*)audioBuffer;
-            
             for (int i = 0; i < samples; i++) {
-                sum += abs(pcmSamples[i]);
+                sampleSum += pcmSamples[i];
             }
-            int avgEnergy = sum / samples;
+            int dcOffset = samples > 0 ? (sampleSum / samples) : 0;
+
+            // 2. Calculate average energy by removing the DC offset from each sample
+            long sum = 0;
+            for (int i = 0; i < samples; i++) {
+                sum += abs(pcmSamples[i] - dcOffset);
+            }
+            int avgEnergy = samples > 0 ? (sum / samples) : 0;
             unsigned long now = millis();
 
             // VAD Speech Gate check
