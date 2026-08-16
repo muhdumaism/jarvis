@@ -28,7 +28,7 @@ extern char currentSystemState[];
 // Shared Voice State variables
 bool isCapturingVoice = false;
 unsigned long lastSpeechTime = 0;
-const int energyVADThreshold = 400; // Energy VAD trigger floor (lowered to 400 for far-field room pickup)
+const int energyVADThreshold = 1000; // Energy VAD trigger floor (stable with DC offset removed)
 const int VADStartDuration = 150;   // Speak for 150ms to trigger
 const int VADEndDuration = 1000;    // Silence for 1000ms (1 second) to stop
 
