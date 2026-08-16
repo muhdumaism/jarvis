@@ -122,6 +122,13 @@ class VoicePipeline:
     async def _on_voice_start(self, event: JarvisEvent) -> None:
         """Handle voice recording start."""
         async with self._lock:
+            # Reject new start events if we are already recording or currently speaking/playing TTS
+            if self._active_session or (self.tts and self.tts.is_speaking):
+                logger.warning("voice.start_ignored_pipeline_busy", 
+                               recording=self._active_session is not None, 
+                               speaking=self.tts.is_speaking if self.tts else False)
+                return
+
             msg_id = event.message_id or str(uuid.uuid4())
             self._active_session = VoiceSession(msg_id)
             self._active_session.started = True

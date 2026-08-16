@@ -23,6 +23,8 @@ TaskHandle_t UITaskHandle = NULL;
 TaskHandle_t VoiceTaskHandle = NULL;
 TaskHandle_t NetworkTaskHandle = NULL;
 
+extern char currentSystemState[];
+
 // Shared Voice State variables
 bool isCapturingVoice = false;
 unsigned long lastSpeechTime = 0;
@@ -105,7 +107,11 @@ void VoiceTask(void* pvParameters) {
             }
 
             // VAD Speech Gate check
-            if (avgEnergy > energyVADThreshold) {
+            // Block new voice triggers if we're already processing or speaking
+            bool isBusy = (strcmp(currentSystemState, "THINKING") == 0 || 
+                           strcmp(currentSystemState, "SPEAKING") == 0);
+
+            if (avgEnergy > energyVADThreshold && !isBusy) {
                 lastSpeechTime = now;
                 if (!isCapturingVoice) {
                     speechAccumulator += (now - lastVADCheck);

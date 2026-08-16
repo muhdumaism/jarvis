@@ -60,6 +60,10 @@ class TTSManager:
     def is_ready(self) -> bool:
         return self.provider.is_ready
 
+    @property
+    def is_speaking(self) -> bool:
+        return self._current_message_id is not None or not self._queue.empty()
+
     async def speak(self, text: str, message_id: Optional[str] = None) -> str:
         """Add a text-to-speech request to the queue. Returns the message_id."""
         msg_id = message_id or str(uuid.uuid4())
