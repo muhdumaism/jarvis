@@ -26,9 +26,9 @@ TaskHandle_t NetworkTaskHandle = NULL;
 // Shared Voice State variables
 bool isCapturingVoice = false;
 unsigned long lastSpeechTime = 0;
-const int energyVADThreshold = 600; // Energy VAD trigger floor
+const int energyVADThreshold = 1500; // Energy VAD trigger floor (increased to filter noise)
 const int VADStartDuration = 150;   // Speak for 150ms to trigger
-const int VADEndDuration = 1500;    // Silence for 1500ms to stop
+const int VADEndDuration = 1000;    // Silence for 1000ms (1 second) to stop
 
 // Base64 encoding helper
 String base64Encode(const uint8_t* data, size_t len) {

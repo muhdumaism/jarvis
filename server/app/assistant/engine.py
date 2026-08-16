@@ -60,7 +60,11 @@ class IntentEngine:
                 "data": dict,
             }
         """
-        cleaned_text = text.lower().strip().replace(".", "").replace(",", "").replace("!", "").replace("?", "").replace("jarvis", "").strip()
+        cleaned_text = text.lower().strip().replace(".", "").replace(",", "").replace("!", "").replace("?", "")
+        for ww in ["jarvis", "pathu", "pattu", "patho", "pathe", "java", "jarves", "jarve"]:
+            cleaned_text = cleaned_text.replace(ww, "")
+        cleaned_text = cleaned_text.strip()
+
 
         # Handle Memory clear command
         if "forget everything" in cleaned_text or "clear all memories" in cleaned_text or "clear your memory" in cleaned_text:
@@ -171,18 +175,8 @@ class IntentEngine:
         ))
 
         # Validate and execute
-        try:
-            result = await self._execute_intent(intent_data, message_id)
-        except Exception as e:
-            logger.error("intent_engine.execute_failed", error=str(e), intent=intent_type, message_id=message_id)
-            result = {
-                "intent": intent_type,
-                "success": False,
-                "response_text": "Sorry, something went wrong while executing that.",
-                "data": intent_data,
-            }
+        result = await self._execute_intent(intent_data, message_id)
 
-        logger.info("intent_engine.result", intent=intent_type, success=result.get("success"), message_id=message_id)
         return result
 
     def _build_prompt(self, text: str, device_list: str) -> str:

@@ -221,11 +221,27 @@ class VoicePipeline:
                 await self._publish_error(msg_id, "STT_ERROR", f"Transcription failed: {e}")
                 return
 
-            if not transcription or not transcription.strip():
-                logger.info("voice.empty_transcription", message_id=msg_id)
-                return
-
             logger.info("voice.transcribed", text=transcription, message_id=msg_id)
+
+            # --- Wake Word Verification ---
+            trans_lower = transcription.lower()
+            wake_words = ["jarvis", "pathu", "pattu", "patho", "pathe", "java", "jarves", "jarve"]
+            has_wake_word = any(ww in trans_lower for ww in wake_words)
+
+            if not has_wake_word:
+                logger.info("voice.wake_word_not_detected", text=transcription, message_id=msg_id)
+                # Reset visual screen back to normal
+                await self.event_bus.publish(JarvisEvent(
+                    type="ASSISTANT_RESPONSE",
+                    source="voice",
+                    message_id=msg_id,
+                    data={
+                        "text": "",
+                        "success": False,
+                        "intent": "ignore_wake_word",
+                    },
+                ))
+                return
 
             await self.event_bus.publish(JarvisEvent(
                 type="VOICE_TRANSCRIBED",
@@ -246,8 +262,6 @@ class VoicePipeline:
                 await self._publish_error(msg_id, "AI_ERROR", f"Intent processing failed: {e}")
                 return
 
-            logger.info("voice.intent_complete", intent=result.get("intent"), success=result.get("success"), message_id=msg_id)
-
             # If the user issued a music playback intent (e.g. they played a new song or explicitly stopped it),
             # we do not want to auto-resume the old music!
             intent_type = result.get("intent", "")
@@ -256,7 +270,6 @@ class VoicePipeline:
 
             # --- TTS Response ---
             response_text = result.get("response_text", "")
-            logger.info("voice.response_ready", text=response_text[:80] if response_text else "", message_id=msg_id)
 
             if response_text and self.tts and self.tts.is_ready:
                 try:

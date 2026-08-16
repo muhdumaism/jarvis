@@ -18,9 +18,9 @@ void initTFT() {
     
     // Explicit SPI pins configuration on HSPI
     // Pass -1 to ss_pin to let Adafruit library manually control CS pin 15
-    hspi.begin(TFT_SCLK, TFT_MISO, TFT_MOSI, -1);
+    hspi.begin(TFT_SCLK, -1, TFT_MOSI, -1);  // MISO=-1 (not connected, GPIO 12 is a strapping pin)
     
-    tft.begin(40000000); // Set SPI speed to 40MHz for max refresh rate
+    tft.begin(40000000); // 40MHz SPI speed for 60 FPS buttery smooth animations
     tft.setRotation(TFT_ROTATION);
     tft.fillScreen(ILI9341_BLACK);
 
