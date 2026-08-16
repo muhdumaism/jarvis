@@ -53,6 +53,8 @@ class VoicePipeline:
         self._active_session: Optional[VoiceSession] = None
         self._lock = asyncio.Lock()
         self._status = "not_initialized"
+        self._awaiting_command = False
+        self._awaiting_command_since: float = 0
 
     async def initialize(self) -> None:
         """Initialize all voice components."""
@@ -230,32 +232,78 @@ class VoicePipeline:
 
             logger.info("voice.transcribed", text=transcription, message_id=msg_id)
 
-            # --- Wake Word Verification ---
+            # --- Wake Word / Command Phase Logic ---
+            import time
             trans_lower = transcription.lower()
             wake_words = ["jarvis", "pathu", "pattu", "patho", "pathe", "java", "jarves", "jarve"]
             has_wake_word = any(ww in trans_lower for ww in wake_words)
+            phase2_accepted = False
 
-            if not has_wake_word:
-                logger.info("voice.wake_word_not_detected", text=transcription, message_id=msg_id)
-                # Reset visual screen back to normal
+            # Check if we are in Phase 2 (awaiting a command after greeting)
+            if self._awaiting_command:
+                self._awaiting_command = False
+                # Timeout: reset if >15 seconds since greeting
+                if time.time() - self._awaiting_command_since > 15:
+                    logger.info("voice.awaiting_command_timeout", message_id=msg_id)
+                else:
+                    # Phase 2: Accept command without wake word
+                    phase2_accepted = True
+                    logger.info("voice.command_received", text=transcription, message_id=msg_id)
+
+                    await self.event_bus.publish(JarvisEvent(
+                        type="VOICE_TRANSCRIBED",
+                        source="voice",
+                        message_id=msg_id,
+                        data={"text": transcription},
+                    ))
+
+            # Phase 1: Check for wake word (skip if Phase 2 already accepted)
+            if not phase2_accepted:
+                if not has_wake_word:
+                    logger.info("voice.wake_word_not_detected", text=transcription, message_id=msg_id)
+                    await self.event_bus.publish(JarvisEvent(
+                        type="ASSISTANT_RESPONSE",
+                        source="voice",
+                        message_id=msg_id,
+                        data={
+                            "text": "",
+                            "success": False,
+                            "intent": "ignore_wake_word",
+                        },
+                    ))
+                    return
+
+                # Strip wake words to see if there's an actual command attached
+                command_text = trans_lower
+                for ww in wake_words:
+                    command_text = command_text.replace(ww, "")
+                command_text = command_text.strip().strip(".,!? ")
+
+                if len(command_text) < 3:
+                    # Wake word only (e.g. just "Jarvis") → Phase 1: Greet and await command
+                    logger.info("voice.wake_word_only", text=transcription, message_id=msg_id)
+                    self._awaiting_command = True
+                    self._awaiting_command_since = time.time()
+
+                    # Speak greeting
+                    if self.tts and self.tts.is_ready:
+                        await self.tts.speak("Hi Umais, how can I help you?", msg_id)
+
+                    await self.event_bus.publish(JarvisEvent(
+                        type="VOICE_TRANSCRIBED",
+                        source="voice",
+                        message_id=msg_id,
+                        data={"text": "[Wake word detected - awaiting command]"},
+                    ))
+                    return
+
+                # Wake word + command (e.g. "Jarvis turn on the light") → process immediately
                 await self.event_bus.publish(JarvisEvent(
-                    type="ASSISTANT_RESPONSE",
+                    type="VOICE_TRANSCRIBED",
                     source="voice",
                     message_id=msg_id,
-                    data={
-                        "text": "",
-                        "success": False,
-                        "intent": "ignore_wake_word",
-                    },
+                    data={"text": transcription},
                 ))
-                return
-
-            await self.event_bus.publish(JarvisEvent(
-                type="VOICE_TRANSCRIBED",
-                source="voice",
-                message_id=msg_id,
-                data={"text": transcription},
-            ))
 
             # --- Intent Processing ---
             if not self.intent_engine or not self.intent_engine.is_ready:
