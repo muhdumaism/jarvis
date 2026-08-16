@@ -99,13 +99,6 @@ void VoiceTask(void* pvParameters) {
             int avgEnergy = samples > 0 ? (sum / samples) : 0;
             unsigned long now = millis();
 
-            static unsigned long lastLogTime = 0;
-            if (now - lastLogTime > 1000) {
-                Serial.printf("[VAD LOG] Energy: %d | DC Bias: %d | Threshold: %d | State: %s\n", 
-                              avgEnergy, dcOffset, energyVADThreshold, isCapturingVoice ? "RECORDING" : "IDLE");
-                lastLogTime = now;
-            }
-
             // VAD Speech Gate check
             // Block new voice triggers if we're already processing or speaking
             bool isBusy = (strcmp(currentSystemState, "THINKING") == 0 || 
