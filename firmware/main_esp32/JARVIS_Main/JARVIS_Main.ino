@@ -26,7 +26,7 @@ TaskHandle_t NetworkTaskHandle = NULL;
 // Shared Voice State variables
 bool isCapturingVoice = false;
 unsigned long lastSpeechTime = 0;
-const int energyVADThreshold = 1000; // Energy VAD trigger floor (1000 is highly stable with DC offset removed)
+const int energyVADThreshold = 400; // Energy VAD trigger floor (lowered to 400 for far-field room pickup)
 const int VADStartDuration = 150;   // Speak for 150ms to trigger
 const int VADEndDuration = 1000;    // Silence for 1000ms (1 second) to stop
 
@@ -97,6 +97,13 @@ void VoiceTask(void* pvParameters) {
             int avgEnergy = samples > 0 ? (sum / samples) : 0;
             unsigned long now = millis();
 
+            static unsigned long lastLogTime = 0;
+            if (now - lastLogTime > 1000) {
+                Serial.printf("[VAD LOG] Energy: %d | DC Bias: %d | Threshold: %d | State: %s\n", 
+                              avgEnergy, dcOffset, energyVADThreshold, isCapturingVoice ? "RECORDING" : "IDLE");
+                lastLogTime = now;
+            }
+
             // VAD Speech Gate check
             if (avgEnergy > energyVADThreshold) {
                 lastSpeechTime = now;
@@ -105,6 +112,7 @@ void VoiceTask(void* pvParameters) {
                     if (speechAccumulator > VADStartDuration) {
                         isCapturingVoice = true;
                         Serial.println("[VAD] Speech detected. VOICE_START trigger.");
+                        setSystemState("LISTENING"); // Instant local screen change
                         
                         // Send start event
                         StaticJsonDocument<128> doc;
@@ -141,6 +149,7 @@ void VoiceTask(void* pvParameters) {
                     isCapturingVoice = false;
                     speechAccumulator = 0;
                     Serial.println("[VAD] Silence timeout. VOICE_END trigger.");
+                    setSystemState("THINKING"); // Instant local screen change
                     
                     StaticJsonDocument<128> docEnd;
                     docEnd["type"] = "VOICE_END";
