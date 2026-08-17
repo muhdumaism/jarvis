@@ -91,10 +91,22 @@ void VoiceTask(void* pvParameters) {
             }
             int dcOffset = samples > 0 ? (sampleSum / samples) : 0;
 
-            // 2. Calculate average energy by removing the DC offset from each sample
+            // 2. Subtract DC offset and apply a 4x software volume boost directly to pcmSamples
+            const float gainFactor = 4.0f; 
             long sum = 0;
             for (int i = 0; i < samples; i++) {
-                sum += abs(pcmSamples[i] - dcOffset);
+                // Remove DC bias
+                int32_t sample = pcmSamples[i] - dcOffset;
+                
+                // Calculate absolute value for energy threshold before amplification
+                sum += abs(sample);
+                
+                // Amplify sample and clamp to 16-bit limits to avoid overflow distortion
+                sample = (int32_t)(sample * gainFactor);
+                if (sample > 32767) sample = 32767;
+                else if (sample < -32768) sample = -32768;
+                
+                pcmSamples[i] = (int16_t)sample;
             }
             int avgEnergy = samples > 0 ? (sum / samples) : 0;
             unsigned long now = millis();
