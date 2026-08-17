@@ -81,6 +81,7 @@ class OllamaProvider:
                     "prompt": prompt,
                     "system": system_prompt,
                     "stream": False,
+                    "format": "json",
                     "options": {
                         "temperature": 0.1,  # Low temperature for consistent intents
                         "num_predict": 256,  # Short responses

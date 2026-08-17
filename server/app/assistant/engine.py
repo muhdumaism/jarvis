@@ -120,6 +120,21 @@ class IntentEngine:
             intent_data = {"intent": "spotify_previous"}
         elif cleaned_text in ["stop alarm", "cancel alarm", "turn off alarm", "dismiss alarm", "stop ringing", "quiet"]:
             intent_data = {"intent": "stop_alarm"}
+        # Fast rule-based overrides for lights/fan to bypass LLM latency and failures
+        elif "light" in cleaned_text or "lifht" in cleaned_text:
+            if "on" in cleaned_text:
+                intent_data = {"intent": "device_control", "target": "ceiling_light", "action": "turn_on"}
+            elif "off" in cleaned_text or "of" in cleaned_text:
+                intent_data = {"intent": "device_control", "target": "ceiling_light", "action": "turn_off"}
+            elif "toggle" in cleaned_text:
+                intent_data = {"intent": "device_control", "target": "ceiling_light", "action": "toggle"}
+        elif "fan" in cleaned_text:
+            if "on" in cleaned_text:
+                intent_data = {"intent": "device_control", "target": "bedroom_fan", "action": "turn_on"}
+            elif "off" in cleaned_text or "of" in cleaned_text:
+                intent_data = {"intent": "device_control", "target": "bedroom_fan", "action": "turn_off"}
+            elif "toggle" in cleaned_text:
+                intent_data = {"intent": "device_control", "target": "bedroom_fan", "action": "toggle"}
 
         if intent_data is None:
             # Build the device context for the LLM
