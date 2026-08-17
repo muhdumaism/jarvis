@@ -131,35 +131,36 @@ class TTSManager:
                     }
                 ))
 
-                # Stream audio chunks to ESP32
-                for i in range(total_chunks):
-                    # Check if cancelled mid-stream
-                    if self._current_message_id != msg_id:
-                        logger.info("tts.interrupted", message_id=msg_id)
-                        break
+                # Stream audio chunks to ESP32 (only if not playing locally on PC)
+                if not settings.play_tts_on_pc:
+                    for i in range(total_chunks):
+                        # Check if cancelled mid-stream
+                        if self._current_message_id != msg_id:
+                            logger.info("tts.interrupted", message_id=msg_id)
+                            break
 
-                    start_idx = i * chunk_size
-                    end_idx = min(start_idx + chunk_size, total_len)
-                    chunk_bytes = pcm_data[start_idx:end_idx]
+                        start_idx = i * chunk_size
+                        end_idx = min(start_idx + chunk_size, total_len)
+                        chunk_bytes = pcm_data[start_idx:end_idx]
 
-                    # Base64 encode for WebSocket JSON transfer
-                    b64_chunk = base64.b64encode(chunk_bytes).decode("utf-8")
+                        # Base64 encode for WebSocket JSON transfer
+                        b64_chunk = base64.b64encode(chunk_bytes).decode("utf-8")
 
-                    await self.event_bus.publish(JarvisEvent(
-                        type="TTS_AUDIO",
-                        source="tts_manager",
-                        message_id=msg_id,
-                        data={
-                            "chunk": i,
-                            "audio": b64_chunk
-                        }
-                    ))
-                    # Sleep slightly to avoid flooding the websocket and buffer on ESP32
-                    # 4096 bytes of 16-bit 22050Hz mono audio is:
-                    # 4096 / 2 bytes_per_sample = 2048 samples
-                    # 2048 / 22050 samples_per_sec = ~0.092 seconds (92ms) of audio
-                    # We can sleep slightly less than that to keep buffer filled, e.g., 60-70ms
-                    await asyncio.sleep(0.06)
+                        await self.event_bus.publish(JarvisEvent(
+                            type="TTS_AUDIO",
+                            source="tts_manager",
+                            message_id=msg_id,
+                            data={
+                                "chunk": i,
+                                "audio": b64_chunk
+                            }
+                        ))
+                        # Sleep slightly to avoid flooding the websocket and buffer on ESP32
+                        # 4096 bytes of 16-bit 22050Hz mono audio is:
+                        # 4096 / 2 bytes_per_sample = 2048 samples
+                        # 2048 / 22050 samples_per_sec = ~0.092 seconds (92ms) of audio
+                        # We can sleep slightly less than that to keep buffer filled, e.g., 60-70ms
+                        await asyncio.sleep(0.06)
 
                 # Send TTS_END if successfully completed without being cancelled
                 if self._current_message_id == msg_id:
