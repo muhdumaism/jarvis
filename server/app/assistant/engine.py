@@ -121,20 +121,34 @@ class IntentEngine:
         elif cleaned_text in ["stop alarm", "cancel alarm", "turn off alarm", "dismiss alarm", "stop ringing", "quiet"]:
             intent_data = {"intent": "stop_alarm"}
         # Fast rule-based overrides for lights/fan to bypass LLM latency and failures
-        elif "light" in cleaned_text or "lifht" in cleaned_text:
+        is_light_cmd = "light" in cleaned_text or "lifht" in cleaned_text
+        is_fan_cmd = "fan" in cleaned_text
+        
+        if is_light_cmd or is_fan_cmd:
+            action = "toggle"
             if "on" in cleaned_text:
-                intent_data = {"intent": "device_control", "target": "ceiling_light", "action": "turn_on"}
+                action = "turn_on"
             elif "off" in cleaned_text or "of" in cleaned_text:
-                intent_data = {"intent": "device_control", "target": "ceiling_light", "action": "turn_off"}
-            elif "toggle" in cleaned_text:
-                intent_data = {"intent": "device_control", "target": "ceiling_light", "action": "toggle"}
-        elif "fan" in cleaned_text:
-            if "on" in cleaned_text:
-                intent_data = {"intent": "device_control", "target": "bedroom_fan", "action": "turn_on"}
-            elif "off" in cleaned_text or "of" in cleaned_text:
-                intent_data = {"intent": "device_control", "target": "bedroom_fan", "action": "turn_off"}
-            elif "toggle" in cleaned_text:
-                intent_data = {"intent": "device_control", "target": "bedroom_fan", "action": "toggle"}
+                action = "turn_off"
+                
+            devices = await self.device_manager.get_all()
+            target_device = None
+            for d in devices:
+                name_lower = d["name"].lower()
+                id_lower = d["id"].lower()
+                if is_light_cmd and ("light" in name_lower or "light" in id_lower or "lifht" in name_lower or "lifht" in id_lower):
+                    target_device = d
+                    break
+                elif is_fan_cmd and ("fan" in name_lower or "fan" in id_lower):
+                    target_device = d
+                    break
+                    
+            if target_device:
+                intent_data = {
+                    "intent": "device_control",
+                    "target": target_device["id"],
+                    "action": action
+                }
 
         if intent_data is None:
             # Build the device context for the LLM
