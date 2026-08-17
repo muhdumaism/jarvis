@@ -28,9 +28,10 @@ extern char currentSystemState[];
 // Shared Voice State variables
 bool isCapturingVoice = false;
 unsigned long lastSpeechTime = 0;
-const int energyVADThreshold = 1500; // Energy VAD trigger floor (above noise spikes of ~1200)
+const int energyVADThreshold = 2000; // Energy VAD trigger floor (above noise/hums of ~1800)
 const int VADStartDuration = 150;   // Speak for 150ms to trigger
 const int VADEndDuration = 1000;    // Silence for 1000ms (1 second) to stop
+unsigned long lastBusyTime = 0;     // Timestamp of last busy state (THINKING/SPEAKING)
 
 // Base64 encoding helper
 String base64Encode(const uint8_t* data, size_t len) {
@@ -112,9 +113,13 @@ void VoiceTask(void* pvParameters) {
             unsigned long now = millis();
 
             // VAD Speech Gate check
-            // Block new voice triggers if we're already processing or speaking
-            bool isBusy = (strcmp(currentSystemState, "THINKING") == 0 || 
-                           strcmp(currentSystemState, "SPEAKING") == 0);
+            // Block new voice triggers if we're already processing or speaking, or recently finished (cooldown)
+            bool isSystemBusy = (strcmp(currentSystemState, "THINKING") == 0 || 
+                                 strcmp(currentSystemState, "SPEAKING") == 0);
+            if (isSystemBusy) {
+                lastBusyTime = now;
+            }
+            bool isBusy = isSystemBusy || (now - lastBusyTime < 1000); // 1-second VAD cooldown after busy state
 
             if (avgEnergy > energyVADThreshold && !isBusy) {
                 lastSpeechTime = now;
