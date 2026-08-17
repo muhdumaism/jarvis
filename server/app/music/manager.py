@@ -181,18 +181,13 @@ class MusicManager:
         if action in ["play", "resume", "search_play"]:
             speaker_name = await self._get_db_setting("bluetooth_speaker_name", settings.bluetooth_speaker_name)
             if not is_bluetooth_speaker_connected(speaker_name):
-                # Alert user speaker is disconnected and prevent false success reports
-                await self.event_bus.publish(JarvisEvent(
-                    type="TTS_SPEAK",
-                    source="music_manager",
-                    data={"text": "Cannot play music. The Bluetooth speaker is disconnected."}
-                ))
+                # Log warning but do NOT block command execution
+                logger.warning("music.speaker_disconnected_warning", speaker_name=speaker_name)
                 await self.event_bus.publish(JarvisEvent(
                     type="speaker_state",
                     source="system",
                     data={"connected": False}
                 ))
-                return
 
         logger.info("music.processing_command", action=action, query=query, value=value)
         success = await self.bridge.execute_command(action, query, value)
